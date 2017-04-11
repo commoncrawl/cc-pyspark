@@ -1,6 +1,6 @@
+import idna
 import ujson as json
 import re
-import idna
 
 from urlparse import urljoin, urlparse
 
@@ -10,10 +10,14 @@ from pyspark.sql.types import StructType, StructField, StringType
 
 class ExtractLinksJob(CCSparkJob):
     name = "ExtractLinks"
+
     output_schema = StructType([
         StructField("s", StringType(), True),
         StructField("t", StringType(), True)
     ])
+
+    warc_parse_http_header = False
+
     records_response = None
     records_response_wat = None
     records_response_warc = None
@@ -22,7 +26,8 @@ class ExtractLinksJob(CCSparkJob):
     records_response_redirect = None
 
     http_redirect_pattern = re.compile('^HTTP\s*/\s*1\.[01]\s*30[1278]\\b')
-    http_redirect_location_pattern = re.compile('^Location:\s*(\S+)', re.IGNORECASE)
+    http_redirect_location_pattern = re.compile('^Location:\s*(\S+)',
+                                                re.IGNORECASE)
 
     @staticmethod
     def _url_join(base, link):
@@ -31,9 +36,9 @@ class ExtractLinksJob(CCSparkJob):
         pass
 
     def process_record(self, record):
-        if (record['WARC-Type'] == 'metadata' and
-                record['Content-Type'] == 'application/json'):
-            record = json.loads(record.payload.read())
+        if (record.rec_type == 'metadata' and
+                record.content_type == 'application/json'):
+            record = json.loads(record.content_stream().read())
             warc_header = record['Envelope']['WARC-Header-Metadata']
             if warc_header['WARC-Type'] != 'response':
                 return
@@ -42,26 +47,27 @@ class ExtractLinksJob(CCSparkJob):
             url = warc_header['WARC-Target-URI']
             for link in self.get_links(url, record):
                 yield link
-        elif record['WARC-Type'] == 'response':
+        elif record.rec_type == 'response':
             self.records_response.add(1)
             self.records_response_warc.add(1)
-            http_status_line = None
-            for line in record.payload:
-                if ExtractLinksJob.http_redirect_pattern.match(line):
-                    self.records_response_redirect.add(1)
-                    http_status_line = line
-                    break
-                else:
-                    return
-            for line in record.payload:
+            stream = record.content_stream()
+            http_status_line = stream.readline()
+            if ExtractLinksJob.http_redirect_pattern.match(http_status_line):
+                self.records_response_redirect.add(1)
+            else:
+                return
+            line = stream.readline()
+            while line:
                 match = ExtractLinksJob.http_redirect_location_pattern.match(line)
                 if match:
-                    redir_target = match.group(1).strip()
-                    for link in self.yield_redirect(record['WARC-Target-URI'], redir_target, http_status_line):
+                    redir_to = match.group(1).strip()
+                    redir_from = record.rec_headers.get_header('WARC-Target-URI')
+                    for link in self.yield_redirect(redir_from, redir_to, http_status_line):
                         yield link
                     return
                 elif line.strip() == '':
                     return
+                line = stream.readline()
 
     def yield_redirect(self, src, target, http_status_line):
         if src != target:
@@ -71,7 +77,7 @@ class ExtractLinksJob(CCSparkJob):
         base_url = urlparse(base)
         for l in links:
             if 'url' in l:
-                link = l['url'] 
+                link = l['url']
                 #lurl = _url_join(base_url, urlparse(link)).geturl()
                 try:
                     lurl = urljoin(base, link)
@@ -279,6 +285,6 @@ class AggregateHostLinksJob(ExtractHostLinksJob):
 
 if __name__ == "__main__":
     #job = ExtractLinksJob()
-    #job = ExtractHostLinksJob()
-    job = AggregateHostLinksJob()
+    job = ExtractHostLinksJob()
+    #job = AggregateHostLinksJob()
     job.run()

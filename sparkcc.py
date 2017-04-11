@@ -1,12 +1,10 @@
 import argparse
-import gzip
 import logging
 import os
 import re
 
 import boto.s3
-import warc
-from gzipstream import GzipStreamFile
+from warcio.archiveiterator import ArchiveIterator
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
@@ -24,6 +22,8 @@ class CCSparkJob:
         StructField("key", StringType(), True),
         StructField("val", LongType(), True)
     ])
+
+    warc_parse_http_header = True
 
     args = None
     records_processed = None
@@ -137,7 +137,7 @@ class CCSparkJob:
                 else:
                     bucket = s3conn.get_bucket(bucketname)
                 s3key = boto.s3.key.Key(bucket, path)
-                stream = warc.WARCFile(fileobj=GzipStreamFile(s3key))
+                stream = s3key
             elif uri.startswith('hdfs://'):
                 self.get_logger().error("HDFS input not implemented: " + uri)
                 continue
@@ -146,9 +146,10 @@ class CCSparkJob:
                 if uri.startswith('file:'):
                     uri = uri[5:]
                 uri = os.path.join(base_dir, uri)
-                stream = warc.WARCFile(fileobj=gzip.open(uri))
+                stream = open(uri, 'rb')
 
-            for record in stream:
+            no_parse = (not self.warc_parse_http_header)
+            for record in ArchiveIterator(stream, no_record_parse=no_parse):
                 for res in self.process_record(record):
                     yield res
                 self.records_processed.add(1)

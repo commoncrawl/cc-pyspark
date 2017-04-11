@@ -1,5 +1,4 @@
 import ujson as json
-import re
 
 from sparkcc import CCSparkJob
 
@@ -9,13 +8,13 @@ class ServerCountJob(CCSparkJob):
         (WARC and WAT is allowed as input)"""
 
     name = "CountServers"
-    server_http_header_pattern = re.compile('^server:\s*(.+)$', re.IGNORECASE)
+    fallback_server_name = '(no server in HTTP header)'
 
     def process_record(self, record):
-        if (record['WARC-Type'] == 'metadata' and
-                record['Content-Type'] == 'application/json'):
+        if (record.rec_type == 'metadata' and
+                record.content_type == 'application/json'):
             # WAT response record
-            record = json.loads(record.payload.read())
+            record = json.loads(record.content_stream().read())
             try:
                 yield record['Envelope'] \
                             ['Payload-Metadata'] \
@@ -24,18 +23,12 @@ class ServerCountJob(CCSparkJob):
                             ['Server'].strip(), 1
             except KeyError:
                 yield '(no server in HTTP header)', 1
-        elif record['WARC-Type'] == 'response':
+        elif record.rec_type == 'response':
             # WARC response record
-            for line in record.payload:
-                match = ServerCountJob.server_http_header_pattern.match(line)
-                if match:
-                    yield match.group(1).strip(), 1
-                    return
-                elif line.strip() == '':
-                    # empty line indicates end of HTTP response header
-                    yield '(no server in HTTP header)', 1
-                    return
-
+            server_name = record.http_headers.get_header(
+                'server',
+                ServerCountJob.fallback_server_name)
+            yield server_name, 1
 
 if __name__ == "__main__":
     job = ServerCountJob()
