@@ -44,10 +44,10 @@ class CCSparkJob:
 
         arg_parser.add_argument("--num_input_partitions", type=int,
                                 default=self.num_input_partitions,
-                                help="number of input splits/partitions")
+                                help="Number of input splits/partitions")
         arg_parser.add_argument("--num_output_partitions", type=int,
                                 default=self.num_output_partitions,
-                                help="number of output partitions")
+                                help="Number of output partitions")
 
         arg_parser.add_argument("--log_level", default=self.log_level,
                                 help="Logging level")
