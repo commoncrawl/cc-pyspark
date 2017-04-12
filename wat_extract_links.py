@@ -1,5 +1,6 @@
 import idna
 import ujson as json
+import os
 import re
 
 from urlparse import urljoin, urlparse
@@ -28,6 +29,11 @@ class ExtractLinksJob(CCSparkJob):
     http_redirect_pattern = re.compile('^HTTP\s*/\s*1\.[01]\s*30[1278]\\b')
     http_redirect_location_pattern = re.compile('^Location:\s*(\S+)',
                                                 re.IGNORECASE)
+
+    def add_arguments(self, parser):
+        parser.add_argument("--intermediate_output", type=str,
+                            default=None,
+                            help="Intermediate output to recover job from")
 
     @staticmethod
     def _url_join(base, link):
@@ -58,11 +64,12 @@ class ExtractLinksJob(CCSparkJob):
                 return
             line = stream.readline()
             while line:
-                match = ExtractLinksJob.http_redirect_location_pattern.match(line)
-                if match:
-                    redir_to = match.group(1).strip()
+                m = ExtractLinksJob.http_redirect_location_pattern.match(line)
+                if m:
+                    redir_to = m.group(1).strip()
                     redir_from = record.rec_headers.get_header('WARC-Target-URI')
-                    for link in self.yield_redirect(redir_from, redir_to, http_status_line):
+                    for link in self.yield_redirect(redir_from, redir_to,
+                                                    http_status_line):
                         yield link
                     return
                 elif line.strip() == '':
@@ -116,6 +123,25 @@ class ExtractLinksJob(CCSparkJob):
             self.get_logger().error("Failed to parse record for " + url + " - " + e)
             self.records_failed.add(1)
 
+    def log_aggregator(self, sc, agg, descr):
+        self.get_logger(sc).info(descr.format(agg.value))
+
+    def log_aggregators(self, sc):
+        self.log_aggregator(sc, self.records_processed,
+                            'records processed = {}')
+        self.log_aggregator(sc, self.records_response,
+                            'response records = {}')
+        self.log_aggregator(sc, self.records_failed,
+                            'records failed to process = {}')
+        self.log_aggregator(sc, self.records_non_html,
+                            'records not HTML = {}')
+        self.log_aggregator(sc, self.records_response_wat,
+                            'response records WAT = {}')
+        self.log_aggregator(sc, self.records_response_warc,
+                            'response records WARC = {}')
+        self.log_aggregator(sc, self.records_response_redirect,
+                            'response records redirects = {}')
+
     def run_job(self, sc, sqlc):
         self.records_failed = sc.accumulator(0)
         self.records_non_html = sc.accumulator(0)
@@ -124,38 +150,35 @@ class ExtractLinksJob(CCSparkJob):
         self.records_response_warc = sc.accumulator(0)
         self.records_response_redirect = sc.accumulator(0)
 
-        input_data = sc.textFile(self.args.input,
-                                 minPartitions=self.args.num_input_partitions)
+        output = None
+        if self.args.input != '':
+            input_data = sc.textFile(self.args.input,
+                                     minPartitions=self.args.num_input_partitions)
+            output = input_data.mapPartitionsWithIndex(self.process_warcs)
 
-        output = input_data \
-            .mapPartitionsWithIndex(self.process_warcs) \
-            .persist()
-        output.saveAsTextFile(self.args.output,
-                              'org.apache.hadoop.io.compress.GzipCodec')
-        # TODO: separately configurable path
+        if self.args.intermediate_output is None:
+            df = sqlc.createDataFrame(output, schema=self.output_schema)
+        else:
+            if output is not None:
+                sqlc.createDataFrame(output, schema=self.output_schema) \
+                    .write \
+                    .format("parquet") \
+                    .saveAsTable(self.args.intermediate_output)
+                self.log_aggregators(sc)
+            warehouse_dir = sc.getConf().get('spark.sql.warehouse.dir',
+                                             'spark-warehouse')
+            intermediate_output = os.path.join(warehouse_dir,
+                                               self.args.intermediate_output)
+            df = sqlc.read.parquet(intermediate_output)
 
-        sqlc.createDataFrame(output, schema=self.output_schema) \
-            .dropDuplicates() \
-            .coalesce(self.args.num_output_partitions) \
-            .sortWithinPartitions('s', 't') \
-            .write \
-            .format("parquet") \
-            .saveAsTable(self.args.output)
+        df.dropDuplicates() \
+          .coalesce(self.args.num_output_partitions) \
+          .sortWithinPartitions('s', 't') \
+          .write \
+          .format("parquet") \
+          .saveAsTable(self.args.output)
 
-        self.get_logger(sc).info(
-            'records processed = {}'.format(self.records_processed.value))
-        self.get_logger(sc).info(
-            'response records = {}'.format(self.records_response.value))
-        self.get_logger(sc).info(
-            'records failed to process = {}'.format(self.records_failed.value))
-        self.get_logger(sc).info(
-            'records not HTML = {}'.format(self.records_non_html.value))
-        self.get_logger(sc).info(
-            'response records WAT = {}'.format(self.records_response_wat.value))
-        self.get_logger(sc).info(
-            'response records WARC = {}'.format(self.records_response_warc.value))
-        self.get_logger(sc).info(
-            'response records redirects = {}'.format(self.records_response_redirect.value))
+        self.log_aggregators(sc)
 
 
 class ExtractHostLinksJob(ExtractLinksJob):
@@ -254,37 +277,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
         yield src_host, thost
 
 
-import ast
-
-class AggregateHostLinksJob(ExtractHostLinksJob):
-
-    name = 'AggregateHostLinksJob'
-
-    @staticmethod
-    def deserialize(iterator):
-        for string in iterator:
-            try:
-                from_to = ast.literal_eval(string)
-                yield from_to[0], from_to[1]
-            except ValueError as e:
-                print(string, e)
-
-    def run_job(self, sc, sqlc):
-
-        extracted_data = sc.textFile(self.args.input) \
-            .mapPartitions(AggregateHostLinksJob.deserialize)
-
-        sqlc.createDataFrame(extracted_data, schema=self.output_schema) \
-            .dropDuplicates() \
-            .coalesce(self.args.num_output_partitions) \
-            .sortWithinPartitions('s', 't') \
-            .write \
-            .format("parquet") \
-            .saveAsTable(self.args.output)
-
-
 if __name__ == "__main__":
-    #job = ExtractLinksJob()
+    # job = ExtractLinksJob()
     job = ExtractHostLinksJob()
-    #job = AggregateHostLinksJob()
     job.run()
