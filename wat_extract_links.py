@@ -17,8 +17,6 @@ class ExtractLinksJob(CCSparkJob):
         StructField("t", StringType(), True)
     ])
 
-    warc_parse_http_header = False
-
     records_response = None
     records_response_wat = None
     records_response_warc = None
@@ -42,9 +40,9 @@ class ExtractLinksJob(CCSparkJob):
         pass
 
     def process_record(self, record):
-        if (record.rec_type == 'metadata' and
-                record.content_type == 'application/json'):
-            record = json.loads(record.content_stream().read())
+        if (record['WARC-Type'] == 'metadata' and
+                record['Content-Type'] == 'application/json'):
+            record = json.loads(record.payload.read())
             warc_header = record['Envelope']['WARC-Header-Metadata']
             if warc_header['WARC-Type'] != 'response':
                 return
@@ -53,28 +51,27 @@ class ExtractLinksJob(CCSparkJob):
             url = warc_header['WARC-Target-URI']
             for link in self.get_links(url, record):
                 yield link
-        elif record.rec_type == 'response':
+        elif record['WARC-Type'] == 'response':
             self.records_response.add(1)
             self.records_response_warc.add(1)
-            stream = record.content_stream()
-            http_status_line = stream.readline()
-            if ExtractLinksJob.http_redirect_pattern.match(http_status_line):
-                self.records_response_redirect.add(1)
-            else:
-                return
-            line = stream.readline()
-            while line:
+            http_status_line = None
+            for line in record.payload:
+                if ExtractLinksJob.http_redirect_pattern.match(line):
+                    self.records_response_redirect.add(1)
+                    http_status_line = line
+                    break
+                else:
+                    return
+            for line in record.payload:
                 m = ExtractLinksJob.http_redirect_location_pattern.match(line)
                 if m:
                     redir_to = m.group(1).strip()
-                    redir_from = record.rec_headers.get_header('WARC-Target-URI')
-                    for link in self.yield_redirect(redir_from, redir_to,
-                                                    http_status_line):
+                    redir_from = record['WARC-Target-URI']
+                    for link in self.yield_redirect(redir_from, redir_to, http_status_line):
                         yield link
                     return
                 elif line.strip() == '':
                     return
-                line = stream.readline()
 
     def yield_redirect(self, src, target, http_status_line):
         if src != target:
