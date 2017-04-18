@@ -33,8 +33,8 @@ class ExtractLinksJob(CCSparkJob):
     records_non_html = None
     records_response_redirect = None
 
-    http_redirect_pattern = re.compile('^HTTP\s*/\s*1\.[01]\s*30[1278]\\b')
-    http_redirect_location_pattern = re.compile('^Location:\s*(\S+)',
+    http_redirect_pattern = re.compile(b'^HTTP\s*/\s*1\.[01]\s*30[1278]\\b')
+    http_redirect_location_pattern = re.compile(b'^Location:\s*(\S+)',
                                                 re.IGNORECASE)
 
     def add_arguments(self, parser):
@@ -74,6 +74,11 @@ class ExtractLinksJob(CCSparkJob):
                 m = ExtractLinksJob.http_redirect_location_pattern.match(line)
                 if m:
                     redir_to = m.group(1).strip()
+                    try:
+                        redir_to = redir_to.decode('utf-8')
+                    except:
+                        self.get_logger().warn(
+                            'URL with unknown encoding: {}'.format(redir_to))
                     redir_from = record.rec_headers.get_header('WARC-Target-URI')
                     for link in self.yield_redirect(redir_from, redir_to,
                                                     http_status_line):
@@ -87,17 +92,19 @@ class ExtractLinksJob(CCSparkJob):
         if src != target:
             yield src, target
 
-    def yield_links(self, base, links):
-        base_url = urlparse(base)
+    def yield_links(self, from_url, base_url, links):
+        # base_url = urlparse(base)
+        if base_url is None:
+            base_url = from_url
         for l in links:
             if 'url' in l:
                 link = l['url']
-                #lurl = _url_join(base_url, urlparse(link)).geturl()
+                # lurl = _url_join(base_url, urlparse(link)).geturl()
                 try:
-                    lurl = urljoin(base, link)
+                    lurl = urljoin(base_url, link)
                 except ValueError:
                     pass
-                yield base, lurl
+                yield from_url, lurl
 
     def get_links(self, url, record):
         try:
@@ -106,25 +113,25 @@ class ExtractLinksJob(CCSparkJob):
                 self.records_non_html.add(1)
                 return
             html_meta = response_meta['HTML-Metadata']
-            base = url
+            base = None
             if 'Head' in html_meta:
                 head = html_meta['Head']
                 if 'Base' in head:
                     try:
-                        base = urljoin(base, head['Base'])
+                        base = urljoin(url, head['Base'])
                     except ValueError:
                         pass
                 if 'Link' in head:
                     # <link ...>
-                    for l in self.yield_links(base, head['Link']):
+                    for l in self.yield_links(url, base, head['Link']):
                         yield l
                 if 'Metas' in head:
                     for m in head['Metas']:
                         if 'property' in m and m['property'] == 'og:url':
-                            for l in self.yield_links(base, [m]):
+                            for l in self.yield_links(url, base, [m]):
                                 yield l
             if 'Links' in html_meta:
-                for l in self.yield_links(base, html_meta['Links']):
+                for l in self.yield_links(url, base, html_meta['Links']):
                     yield l
         except KeyError as e:
             self.get_logger().error("Failed to parse record for {}: {}".format(
@@ -211,11 +218,11 @@ class ExtractHostLinksJob(ExtractLinksJob):
     global_link_pattern = re.compile('^[a-z][a-z0-9]{1,5}://', re.IGNORECASE)
 
     # match IP addresses
-    ip_pattern = re.compile('^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}$')
+    ip_pattern = re.compile('^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}\Z')
 
     # valid host names, relaxed allowing underscore, allowing also IDNs
     # https://en.wikipedia.org/wiki/Hostname#Restrictions_on_valid_hostnames
-    host_part_pattern = re.compile('^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$',
+    host_part_pattern = re.compile('^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?\Z',
                                    re.IGNORECASE)
 
     @staticmethod
@@ -239,9 +246,10 @@ class ExtractHostLinksJob(ExtractLinksJob):
             parts = parts[1:]
         for i in range(0, len(parts)):
             part = parts[i]
+            print(part)
             if not ExtractHostLinksJob.host_part_pattern.match(part):
                 try:
-                    idn = idna.encode(part)
+                    idn = idna.encode(part).decode('ascii')
                 except (idna.IDNAError, UnicodeDecodeError, IndexError,
                         Exception):
                     # self.get_logger().debug("Invalid host name: {}".format(url))
@@ -255,11 +263,12 @@ class ExtractHostLinksJob(ExtractLinksJob):
         parts.reverse()
         return '.'.join(parts)
 
-    def yield_links(self, base, links):
-        src_host = ExtractHostLinksJob.get_surt_host(base)
-        if src_host is None:
+    def yield_links(self, from_url, base_url, links):
+        from_host = ExtractHostLinksJob.get_surt_host(from_url)
+        if from_host is None:
             return
         target_hosts = set()
+        inner_host_links = 0
         for l in links:
             link = None
             if 'url' in l:
@@ -276,10 +285,16 @@ class ExtractHostLinksJob(ExtractLinksJob):
                             target_hosts.add(thost)
                     except ValueError:
                         pass
+                else:
+                    inner_host_links += 1
         for t in target_hosts:
-            if t == src_host:
-                continue
-            yield src_host, t
+            if t != from_host:
+                yield from_host, t
+        if inner_host_links > 0 and base_url is not None:
+            base_host = ExtractHostLinksJob.get_surt_host(base_url)
+            if base_host is not None and base_host != from_host:
+                # any internal link becomes an external link
+                yield from_host, base_host
 
     def yield_redirect(self, src, target, http_status_line):
         if src == target:
