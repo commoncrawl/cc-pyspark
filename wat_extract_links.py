@@ -3,13 +3,20 @@ import ujson as json
 import os
 import re
 
-from urlparse import urljoin, urlparse
+try:
+    # Python2
+    from urlparse import urljoin, urlparse
+except ImportError:
+    # Python3
+    from urllib.parse import urljoin, urlparse
 
 from sparkcc import CCSparkJob
 from pyspark.sql.types import StructType, StructField, StringType
 
 
 class ExtractLinksJob(CCSparkJob):
+    '''Extract links from WAT files and redirects from WARC files'''
+    ''' and save them as pairs <from, to>'''
     name = "ExtractLinks"
 
     output_schema = StructType([
@@ -120,7 +127,8 @@ class ExtractLinksJob(CCSparkJob):
                 for l in self.yield_links(base, html_meta['Links']):
                     yield l
         except KeyError as e:
-            self.get_logger().error("Failed to parse record for " + url + " - " + e)
+            self.get_logger().error("Failed to parse record for {}: {}".format(
+                url, e))
             self.records_failed.add(1)
 
     def log_aggregator(self, sc, agg, descr):
@@ -152,8 +160,9 @@ class ExtractLinksJob(CCSparkJob):
 
         output = None
         if self.args.input != '':
-            input_data = sc.textFile(self.args.input,
-                                     minPartitions=self.args.num_input_partitions)
+            input_data = sc.textFile(
+                self.args.input,
+                minPartitions=self.args.num_input_partitions)
             output = input_data.mapPartitionsWithIndex(self.process_warcs)
 
         if self.args.intermediate_output is None:
@@ -182,6 +191,10 @@ class ExtractLinksJob(CCSparkJob):
 
 
 class ExtractHostLinksJob(ExtractLinksJob):
+    '''Extract links from WAT files and redirects from WARC files,
+     extract the host names, reverse the names (example.com -> com.example)
+     and save the pairs <from_host, to_host>.'''
+
     name = "ExtrHostLinks"
     output_schema = StructType([
         StructField("s", StringType(), True),
@@ -202,15 +215,15 @@ class ExtractHostLinksJob(ExtractLinksJob):
 
     # valid host names, relaxed allowing underscore, allowing also IDNs
     # https://en.wikipedia.org/wiki/Hostname#Restrictions_on_valid_hostnames
-    host_part_pattern = re.compile('^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$', re.IGNORECASE)
-
+    host_part_pattern = re.compile('^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$',
+                                   re.IGNORECASE)
 
     @staticmethod
     def get_surt_host(url):
         try:
             host = urlparse(url).hostname
         except:
-            # self.get_logger().debug("Failed to parse URL " + url)
+            # self.get_logger().debug("Failed to parse URL {}: {}".format(url, e))
             return None
         if host is None or ExtractHostLinksJob.ip_pattern.match(host):
             return None
@@ -229,7 +242,8 @@ class ExtractHostLinksJob(ExtractLinksJob):
             if not ExtractHostLinksJob.host_part_pattern.match(part):
                 try:
                     idn = idna.encode(part)
-                except (idna.IDNAError, UnicodeDecodeError, IndexError, Exception):
+                except (idna.IDNAError, UnicodeDecodeError, IndexError,
+                        Exception):
                     # self.get_logger().debug("Invalid host name: {}".format(url))
                     return None
 
@@ -249,10 +263,10 @@ class ExtractHostLinksJob(ExtractLinksJob):
         for l in links:
             link = None
             if 'url' in l:
-                link = l['url'] 
+                link = l['url']
             elif 'content' in l:
                 link = l['content']
-            if link != None:
+            if link is not None:
                 if self.global_link_pattern.match(link):
                     try:
                         thost = ExtractHostLinksJob.get_surt_host(link)

@@ -3,8 +3,11 @@ import logging
 import os
 import re
 
-import boto.s3
+import boto3
+import botocore
+
 from warcio.archiveiterator import ArchiveIterator
+from tempfile import TemporaryFile
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
@@ -35,12 +38,18 @@ class CCSparkJob:
 
     def parse_arguments(self):
         """ Returns the parsed arguments from the command line """
-        arg_parser = argparse.ArgumentParser(description=self.name)
+
+        description = self.name
+        if self.__doc__ is not None:
+            description += " - "
+            description += self.__doc__
+        arg_parser = argparse.ArgumentParser(description=description)
 
         arg_parser.add_argument("input",
                                 help="Path to file listing input paths")
         arg_parser.add_argument("output",
-                                help="Output path (subdir of spark.sql.warehouse.dir)")
+                                help="Name of output table"
+                                " (saved in spark.sql.warehouse.dir)")
 
         arg_parser.add_argument("--num_input_partitions", type=int,
                                 default=self.num_input_partitions,
@@ -115,29 +124,27 @@ class CCSparkJob:
             self.records_processed.value))
 
     def process_warcs(self, id_, iterator):
-        s3conn = None
-        ccbucket = None
         s3pattern = re.compile('^s3://([^/]+)/(.+)')
         base_dir = os.path.abspath(os.path.dirname(__file__))
+
+        # S3 client (not thread-safe, initialize outside parallelized loop)
+        no_sign_request = botocore.client.Config(
+            signature_version=botocore.UNSIGNED)
+        s3client = boto3.client('s3', config=no_sign_request)
 
         for uri in iterator:
             if uri.startswith('s3://'):
                 self.get_logger().info('Reading from S3 {}'.format(uri))
-                if s3conn is None:
-                    s3conn = boto.connect_s3(anon=True,
-                                             host='s3.amazonaws.com')
-                    ccbucket = s3conn.get_bucket('commoncrawl')
                 s3match = s3pattern.match(uri)
                 if s3match is None:
                     self.get_logger().error("Invalid S3 URI: " + uri)
+                    continue
                 bucketname = s3match.group(1)
                 path = s3match.group(2)
-                if bucketname == 'commoncrawl':
-                    bucket = ccbucket
-                else:
-                    bucket = s3conn.get_bucket(bucketname)
-                s3key = boto.s3.key.Key(bucket, path)
-                stream = s3key
+                warctemp = TemporaryFile(mode='w+b')
+                s3client.download_fileobj(bucketname, path, warctemp)
+                warctemp.seek(0)
+                stream = warctemp
             elif uri.startswith('hdfs://'):
                 self.get_logger().error("HDFS input not implemented: " + uri)
                 continue

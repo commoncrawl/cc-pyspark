@@ -1,2 +1,6 @@
-boto
+boto3
+ujson
 warcio
+
+# for link extraction and webgraph construction also:
+idna
