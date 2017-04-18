@@ -51,7 +51,12 @@ class ExtractLinksJob(CCSparkJob):
     def process_record(self, record):
         if (record.rec_type == 'metadata' and
                 record.content_type == 'application/json'):
-            record = json.loads(record.content_stream().read())
+            try:
+                record = json.loads(record.content_stream().read())
+            except ValueError as e:
+                self.get_logger().error('Failed to load JSON: {}'.format(e))
+                self.records_failed.add(1)
+                return
             warc_header = record['Envelope']['WARC-Header-Metadata']
             if warc_header['WARC-Type'] != 'response':
                 return
