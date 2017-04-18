@@ -22,13 +22,14 @@ class ServerCountJob(CCSparkJob):
                             ['Headers'] \
                             ['Server'].strip(), 1
             except KeyError:
-                yield '(no server in HTTP header)', 1
+                yield ServerCountJob.fallback_server_name, 1
         elif record.rec_type == 'response':
             # WARC response record
             server_name = record.http_headers.get_header(
                 'server',
                 ServerCountJob.fallback_server_name)
             yield server_name, 1
+
 
 if __name__ == "__main__":
     job = ServerCountJob()
