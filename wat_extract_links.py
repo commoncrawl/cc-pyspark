@@ -143,12 +143,15 @@ class ExtractLinksJob(CCSparkJob):
                 url, e))
             self.records_failed.add(1)
 
-    def log_aggregator(self, sc, agg, descr):
-        self.get_logger(sc).info(descr.format(agg.value))
-
     def log_aggregators(self, sc):
+        # super(ExtractHostLinksJob, self).log_aggregators(sc)
+        self.log_aggregator(sc, self.warc_input_processed,
+                            'WARC input files processed = {}')
+        self.log_aggregator(sc, self.warc_input_failed,
+                            'records processed = {}')
         self.log_aggregator(sc, self.records_processed,
                             'records processed = {}')
+
         self.log_aggregator(sc, self.records_response,
                             'response records = {}')
         self.log_aggregator(sc, self.records_failed,
@@ -251,12 +254,11 @@ class ExtractHostLinksJob(ExtractLinksJob):
             parts = parts[1:]
         for i in range(0, len(parts)):
             part = parts[i]
-            print(part)
             if not ExtractHostLinksJob.host_part_pattern.match(part):
                 try:
                     idn = idna.encode(part).decode('ascii')
                 except (idna.IDNAError, UnicodeDecodeError, IndexError,
-                        Exception):
+                        UnicodeEncodeError, Exception):
                     # self.get_logger().debug("Invalid host name: {}".format(url))
                     return None
 
@@ -275,6 +277,8 @@ class ExtractHostLinksJob(ExtractLinksJob):
         target_hosts = set()
         inner_host_links = 0
         for l in links:
+            if l is None:
+                continue
             link = None
             if 'url' in l:
                 link = l['url']
