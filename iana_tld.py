@@ -1,5 +1,5 @@
 # https://data.iana.org/TLD/tlds-alpha-by-domain.txt
-# (fetched 2017-03-17)
+# (fetched 2017-04-20)
 
 iana_tld_list = frozenset({
     'aaa', 'aarp', 'abarth', 'abb', 'abbott', 'abbvie', 'abc',
@@ -82,7 +82,7 @@ iana_tld_list = frozenset({
     'here', 'hermes', 'hgtv', 'hiphop', 'hisamitsu', 'hitachi', 'hiv',
     'hk', 'hkt', 'hm', 'hn', 'hockey', 'holdings', 'holiday', 'homedepot',
     'homegoods', 'homes', 'homesense', 'honda', 'honeywell', 'horse',
-    'hospital', 'host', 'hosting', 'hot', 'hoteles', 'hotmail', 'house',
+    'hospital', 'host', 'hosting', 'hot', 'hoteles', 'hotels', 'hotmail', 'house',
     'how', 'hr', 'hsbc', 'ht', 'htc', 'hu', 'hughes', 'hyatt', 'hyundai',
     'ibm', 'icbc', 'ice', 'icu', 'id', 'ie', 'ieee', 'ifm', 'ikano', 'il',
     'im', 'imamat', 'imdb', 'immo', 'immobilien', 'in', 'industries',
@@ -145,7 +145,7 @@ iana_tld_list = frozenset({
     'report', 'republican', 'rest', 'restaurant', 'review', 'reviews',
     'rexroth', 'rich', 'richardli', 'ricoh', 'rightathome', 'ril', 'rio',
     'rip', 'rmit', 'ro', 'rocher', 'rocks', 'rodeo', 'rogers', 'room',
-    'rs', 'rsvp', 'ru', 'ruhr', 'run', 'rw', 'rwe', 'ryukyu', 'sa',
+    'rs', 'rsvp', 'ru', 'rugby', 'ruhr', 'run', 'rw', 'rwe', 'ryukyu', 'sa',
     'saarland', 'safe', 'safety', 'sakura', 'sale', 'salon', 'samsclub',
     'samsung', 'sandvik', 'sandvikcoromant', 'sanofi', 'sap', 'sapo',
     'sarl', 'sas', 'save', 'saxo', 'sb', 'sbi', 'sbs', 'sc', 'sca', 'scb',
