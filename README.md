@@ -88,16 +88,16 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 ## Credits
 
-The examples are ported from Stephen Merity's [cc-mrjob](../cc-mrjob/) with a couple of upgrades:
+Examples are ported from Stephen Merity's [cc-mrjob](//github.com/commoncrawl/cc-mrjob/) with a couple of upgrades:
 * based on Apache Spark (instead of [mrjob](https://pythonhosted.org/mrjob/))
 * [boto3](http://boto3.readthedocs.io/) supporting multi-part download of data from S3
 * [warcio](https://github.com/webrecorder/warcio) a Python 2 and Python 3 compatible module to access WARC files
 
 Further inspirations are taken from
-* [cosr-back] written by Sylvain Zimmer for [Commonsearch](). You definitely should have a look at it if you need more to process the WARC content (a HTML parser for example).
+* [cosr-back](//github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://about.commonsearch.org/). You definitely should have a look at it if you need a more sophisticated WARC processor (including a HTML parser for example).
 * Mark Litwintschik's blog post [Analysing Petabytes of Websites](http://tech.marksblogg.com/petabytes-of-website-data-spark-emr.html)
 
 
 ## License
 
-MIT License, as per [LICENSE](./blob/master/LICENSE)
+MIT License, as per [LICENSE](./LICENSE)
