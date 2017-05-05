@@ -11,24 +11,34 @@ class ServerCountJob(CCSparkJob):
     fallback_server_name = '(no server in HTTP header)'
 
     def process_record(self, record):
-        if (record.rec_type == 'metadata' and
-                record.content_type == 'application/json'):
-            # WAT response record
+        server_name = None
+
+        if self.is_wat_json_record:
+            # WAT (response) record
             record = json.loads(record.content_stream().read())
             try:
-                yield record['Envelope'] \
-                            ['Payload-Metadata'] \
-                            ['HTTP-Response-Metadata'] \
-                            ['Headers'] \
-                            ['Server'].strip(), 1
+                payload = record['Envelope']['Payload-Metadata']
+                if 'HTTP-Response-Metadata' in payload:
+                    server_name = payload['HTTP-Response-Metadata'] \
+                                         ['Headers'] \
+                                         ['Server'] \
+                                         .strip()
+                else:
+                    # WAT request or metadata records
+                    return
             except KeyError:
-                yield ServerCountJob.fallback_server_name, 1
+                pass
         elif record.rec_type == 'response':
             # WARC response record
-            server_name = record.http_headers.get_header(
-                'server',
-                ServerCountJob.fallback_server_name)
+            server_name = record.http_headers.get_header('server', None)
+        else:
+            # warcinfo, request, non-WAT metadata records
+            return
+
+        if server_name and server_name != '':
             yield server_name, 1
+        else:
+            yield ServerCountJob.fallback_server_name, 1
 
 
 if __name__ == "__main__":
