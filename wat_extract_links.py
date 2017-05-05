@@ -49,8 +49,7 @@ class ExtractLinksJob(CCSparkJob):
         pass
 
     def process_record(self, record):
-        if (record.rec_type == 'metadata' and
-                record.content_type == 'application/json'):
+        if self.is_wat_json_record(record):
             try:
                 record = json.loads(record.content_stream().read())
             except ValueError as e:
@@ -59,6 +58,7 @@ class ExtractLinksJob(CCSparkJob):
                 return
             warc_header = record['Envelope']['WARC-Header-Metadata']
             if warc_header['WARC-Type'] != 'response':
+                # WAT request or metadata records
                 return
             self.records_response.add(1)
             self.records_response_wat.add(1)

@@ -3,12 +3,13 @@ import logging
 import os
 import re
 
+from tempfile import TemporaryFile
+
 import boto3
 import botocore
 
 from warcio.archiveiterator import ArchiveIterator
 from warcio.recordloader import ArchiveLoadFailed
-from tempfile import TemporaryFile
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
@@ -123,12 +124,16 @@ class CCSparkJob:
         self.log_aggregator(sc, self.records_processed,
                             'records processed = {}')
 
+    @staticmethod
+    def reduce_by_key_func(a, b):
+        return a + b
+
     def run_job(self, sc, sqlc):
         input_data = sc.textFile(self.args.input,
                                  minPartitions=self.args.num_input_partitions)
 
         output = input_data.mapPartitionsWithIndex(self.process_warcs) \
-            .reduceByKey(lambda x, y: x + y)
+            .reduceByKey(self.reduce_by_key_func)
 
         sqlc.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
@@ -198,3 +203,15 @@ class CCSparkJob:
 
     def process_record(self, record):
         raise NotImplementedError('Processing record needs to be customized')
+
+    @staticmethod
+    def is_wet_text_record(record):
+        """Return true if WARC record is a WET text/plain record"""
+        return (record.rec_type == 'conversion' and
+                record.content_type == 'text/plain')
+
+    @staticmethod
+    def is_wat_json_record(record):
+        """Return true if WARC record is a WAT  record"""
+        return (record.rec_type == 'metadata' and
+                record.content_type == 'application/json')
