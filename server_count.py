@@ -13,7 +13,7 @@ class ServerCountJob(CCSparkJob):
     def process_record(self, record):
         server_name = None
 
-        if self.is_wat_json_record:
+        if self.is_wat_json_record(record):
             # WAT (response) record
             record = json.loads(record.content_stream().read())
             try:
