@@ -61,6 +61,9 @@ class CCSparkJob:
         arg_parser.add_argument("--num_output_partitions", type=int,
                                 default=self.num_output_partitions,
                                 help="Number of output partitions")
+        arg_parser.add_argument("--local_temp_dir", default=None,
+                                help="Local temporary directory, used to"
+                                "buffer content from S3")
 
         arg_parser.add_argument("--log_level", default=self.log_level,
                                 help="Logging level")
@@ -163,7 +166,8 @@ class CCSparkJob:
                     continue
                 bucketname = s3match.group(1)
                 path = s3match.group(2)
-                warctemp = TemporaryFile(mode='w+b')
+                warctemp = TemporaryFile(mode='w+b',
+                                         dir=self.args.local_temp_dir)
                 try:
                     s3client.download_fileobj(bucketname, path, warctemp)
                 except botocore.client.ClientError as exception:
