@@ -21,13 +21,13 @@ for data_type in warc wat wet; do
 	mkdir -p crawl-data/$CRAWL/
 	listing=crawl-data/$CRAWL/$data_type.paths.gz
 	cd crawl-data/$CRAWL/
-	wget --timestamping $BASE_URL/$listing
+	wget --no-check-certificate --timestamping $BASE_URL/$listing
 	cd -
 
 	file=$(gzip -dc $listing | head -1)
 	mkdir -p $(dirname $file)
 	cd $(dirname $file)
-	wget --timestamping $BASE_URL/$file
+	wget --no-check-certificate --timestamping $BASE_URL/$file
 	cd -
 
 	echo file:$PWD/$file >>input/test_${data_type}.txt
