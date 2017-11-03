@@ -216,6 +216,6 @@ class CCSparkJob:
 
     @staticmethod
     def is_wat_json_record(record):
-        """Return true if WARC record is a WAT  record"""
+        """Return true if WARC record is a WAT record"""
         return (record.rec_type == 'metadata' and
                 record.content_type == 'application/json')

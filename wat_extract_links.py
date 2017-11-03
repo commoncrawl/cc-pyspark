@@ -97,13 +97,13 @@ class ExtractLinksJob(CCSparkJob):
         if src != target:
             yield src, target
 
-    def yield_links(self, from_url, base_url, links):
+    def yield_links(self, from_url, base_url, links, url_attr='url'):
         # base_url = urlparse(base)
         if base_url is None:
             base_url = from_url
         for l in links:
-            if 'url' in l:
-                link = l['url']
+            if url_attr in l:
+                link = l[url_attr]
                 # lurl = _url_join(base_url, urlparse(link)).geturl()
                 try:
                     lurl = urljoin(base_url, link)
@@ -133,7 +133,7 @@ class ExtractLinksJob(CCSparkJob):
                 if 'Metas' in head:
                     for m in head['Metas']:
                         if 'property' in m and m['property'] == 'og:url':
-                            for l in self.yield_links(url, base, [m]):
+                            for l in self.yield_links(url, base, [m], 'content'):
                                 yield l
             if 'Links' in html_meta:
                 for l in self.yield_links(url, base, html_meta['Links']):
@@ -270,7 +270,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
         parts.reverse()
         return '.'.join(parts)
 
-    def yield_links(self, from_url, base_url, links):
+    def yield_links(self, from_url, base_url, links, url_attr='url'):
         from_host = ExtractHostLinksJob.get_surt_host(from_url)
         if from_host is None:
             return
@@ -279,12 +279,8 @@ class ExtractHostLinksJob(ExtractLinksJob):
         for l in links:
             if l is None:
                 continue
-            link = None
-            if 'url' in l:
-                link = l['url']
-            elif 'content' in l:
-                link = l['content']
-            if link is not None:
+            if url_attr in l:
+                link = l[url_attr]
                 if self.global_link_pattern.match(link):
                     try:
                         thost = ExtractHostLinksJob.get_surt_host(link)
