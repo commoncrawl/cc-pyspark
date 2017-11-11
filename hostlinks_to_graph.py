@@ -3,7 +3,7 @@ import os
 
 from sparkcc import CCSparkJob
 from pyspark.sql import functions as sqlf
-from pyspark.sql.types import BooleanType
+from pyspark.sql.types import BooleanType, LongType, StringType, StructField, StructType
 
 from iana_tld import iana_tld_list
 
@@ -20,6 +20,12 @@ class HostLinksToGraph(CCSparkJob):
         parser.add_argument("--validate_host_names", action='store_true',
                             help="Validate host names and skip vertices with"
                             " invalid name during assignment of vertex IDs")
+        parser.add_argument("--vertex_partitions", type=int, default=1,
+                            help="Number of partitions to enumerate and store"
+                            " vertices. The default (1 partition) is recommended"
+                            " only for smaller graphs. IDs are represented"
+                            " either as int (if 1 partition) or long (multiple"
+                            " partitions).")
         parser.add_argument("--vertex_ids", type=str,
                             help="Path to table providing hostname - vertex ID"
                             " mappings. If the mapping exists IDs are read"
@@ -58,10 +64,22 @@ class HostLinksToGraph(CCSparkJob):
                                 BooleanType())
             ids = ids.filter(is_valid(ids.name))
 
-        ids = ids \
-            .coalesce(1) \
-            .sort('name') \
-            .withColumn('id', sqlf.monotonically_increasing_id())
+        if self.args.vertex_partitions == 1:
+            ids = ids \
+                    .coalesce(1) \
+                    .sort('name') \
+                    .withColumn('id', sqlf.monotonically_increasing_id())
+        else:
+            id_rdd = ids.select(ids.name).rdd \
+                        .map(lambda row: tuple(row)[0]) \
+                        .sortBy(lambda x: x, True,
+                                self.args.vertex_partitions) \
+                        .zipWithIndex()
+            id_schema = StructType([
+                StructField("name", StringType(), True),
+                StructField("id", LongType(), True)
+            ])
+            ids = sqlc.createDataFrame(id_rdd, schema=id_schema)
 
         if self.args.save_as_text is not None:
             ids = ids.persist()
