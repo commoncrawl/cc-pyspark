@@ -81,9 +81,10 @@ class ExtractLinksJob(CCSparkJob):
                     redir_to = m.group(1).strip()
                     try:
                         redir_to = redir_to.decode('utf-8')
-                    except:
+                    except UnicodeError as e:
                         self.get_logger().warn(
-                            'URL with unknown encoding: {}'.format(redir_to))
+                            'URL with unknown encoding: {} - {}'.format(
+                                redir_to, e))
                     redir_from = record.rec_headers.get_header('WARC-Target-URI')
                     for link in self.yield_redirect(redir_from, redir_to,
                                                     http_status_line):
@@ -222,11 +223,13 @@ class ExtractHostLinksJob(ExtractLinksJob):
     # - with URL scheme, more restrictive than specified in
     #   https://tools.ietf.org/html/rfc3986#section-3.1
     # - or starting with //
-    # (all other "relative" links are within the same host)
-    global_link_pattern = re.compile('^[a-z][a-z0-9]{1,5}://', re.IGNORECASE)
+    #   (all other "relative" links are within the same host)
+    global_link_pattern = re.compile('^(?:[a-z][a-z0-9]{1,5}:)?//',
+                                     re.IGNORECASE)
 
     # match IP addresses
-    ip_pattern = re.compile('^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}\Z')
+    # - including IPs with leading `www.' (stripped)
+    ip_pattern = re.compile('^(?:www\.)?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\Z')
 
     # valid host names, relaxed allowing underscore, allowing also IDNs
     # https://en.wikipedia.org/wiki/Hostname#Restrictions_on_valid_hostnames
@@ -240,10 +243,12 @@ class ExtractHostLinksJob(ExtractLinksJob):
         except:
             # self.get_logger().debug("Failed to parse URL {}: {}".format(url, e))
             return None
-        if host is None or ExtractHostLinksJob.ip_pattern.match(host):
+        if host is None:
             return None
         host = host.strip().lower()
         if len(host) < 1 or len(host) > 253:
+            return None
+        if ExtractHostLinksJob.ip_pattern.match(host):
             return None
         parts = host.split('.')
         if parts[-1] == '':
@@ -252,13 +257,15 @@ class ExtractHostLinksJob(ExtractLinksJob):
         if parts[0] == 'www' and len(parts) > 1:
             # strip leading 'www' to reduce number of "duplicate" hosts
             parts = parts[1:]
+        if len(parts) <= 1:
+            # do not accept single-word hosts, must be at least `domain.tld'
+            return None
         for i in range(0, len(parts)):
             part = parts[i]
             if not ExtractHostLinksJob.host_part_pattern.match(part):
                 try:
                     idn = idna.encode(part).decode('ascii')
-                except (idna.IDNAError, UnicodeDecodeError, IndexError,
-                        UnicodeEncodeError, Exception):
+                except (idna.IDNAError, UnicodeError, IndexError, Exception):
                     # self.get_logger().debug("Invalid host name: {}".format(url))
                     return None
 
