@@ -1,0 +1,8 @@
+*.py[cod]
+
+__pycache__
+
+# Eclipse project files
+.project
+.pydevproject
+
