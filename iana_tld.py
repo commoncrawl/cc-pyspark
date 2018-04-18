@@ -1,5 +1,5 @@
 # https://data.iana.org/TLD/tlds-alpha-by-domain.txt
-# (merged TLDs from tld files fetched between March 2017 and January 2018)
+# (merged TLDs from tld files fetched between March 2017 and April 2018)
 
 iana_tld_list = frozenset({
     'aaa', 'aarp', 'abarth', 'abb', 'abbott', 'abbvie', 'abc',
@@ -116,10 +116,10 @@ iana_tld_list = frozenset({
     'li', 'liaison', 'lidl', 'life', 'lifeinsurance', 'lifestyle',
     'lighting', 'like', 'lilly', 'limited', 'limo', 'lincoln',
     'linde', 'link', 'lipsy', 'live', 'living', 'lixil', 'lk',
-    'loan', 'loans', 'locker', 'locus', 'loft', 'lol', 'london',
-    'lotte', 'lotto', 'love', 'lpl', 'lplfinancial', 'lr', 'ls',
-    'lt', 'ltd', 'ltda', 'lu', 'lundbeck', 'lupin', 'luxe',
-    'luxury', 'lv', 'ly', 'ma', 'macys', 'madrid', 'maif',
+    'llc', 'loan', 'loans', 'locker', 'locus', 'loft', 'lol',
+    'london', 'lotte', 'lotto', 'love', 'lpl', 'lplfinancial',
+    'lr', 'ls', 'lt', 'ltd', 'ltda', 'lu', 'lundbeck', 'lupin',
+    'luxe', 'luxury', 'lv', 'ly', 'ma', 'macys', 'madrid', 'maif',
     'maison', 'makeup', 'man', 'management', 'mango', 'map',
     'market', 'marketing', 'markets', 'marriott', 'marshalls',
     'maserati', 'mattel', 'mba', 'mc', 'mcd', 'mcdonalds',
