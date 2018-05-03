@@ -7,7 +7,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 + count HTML tags in Common Crawl's raw response data (WARC files)
 + count web server names in Common Crawl's metadata (WAT files) and/or WARC files
 + word count (term and document frequency) in Common Crawl's extracted text (WET files)
-+ extract links from WAT files and construct (host-level) web graph
++ extract links from WAT files and construct the (host-level) web graph
 
 
 ## Setup
@@ -21,7 +21,7 @@ To develop and test locally, you will need to install
 
 ## Compatibility and Requirements
 
-Tested with Spark 2.1.0 in combination with Python 2.7 and/or 3.5.
+Tested with Spark 2.1.0 - 2.3.0 in combination with Python 2.7 and/or 3.5.
 
 
 ## Get Sample Data
