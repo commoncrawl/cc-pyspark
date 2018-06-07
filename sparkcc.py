@@ -200,12 +200,13 @@ class CCSparkJob:
                     for res in self.process_record(record):
                         yield res
                     self.records_processed.add(1)
-                if uri.startswith('file:'):
-                    stream.close()
             except ArchiveLoadFailed as exception:
                 self.warc_input_failed.add(1)
                 self.get_logger().error(
                     'Invalid WARC: {} - {}'.format(uri, exception))
+            finally:
+                if uri.startswith('file:'):
+                    stream.close()
 
     def process_record(self, record):
         raise NotImplementedError('Processing record needs to be customized')
