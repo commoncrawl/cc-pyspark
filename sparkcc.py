@@ -174,6 +174,7 @@ class CCSparkJob:
                     self.get_logger().error(
                         'Failed to download {}: {}'.format(uri, exception))
                     self.warc_input_failed.add(1)
+                    warctemp.close()
                     continue
                 warctemp.seek(0)
                 stream = warctemp
@@ -204,6 +205,8 @@ class CCSparkJob:
                 self.warc_input_failed.add(1)
                 self.get_logger().error(
                     'Invalid WARC: {} - {}'.format(uri, exception))
+            finally:
+                stream.close()
 
     def process_record(self, record):
         raise NotImplementedError('Processing record needs to be customized')
