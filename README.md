@@ -5,7 +5,8 @@
 This project provides examples how to process the Common Crawl dataset with [Apache Spark](http://spark.apache.org/) and Python:
 
 + count HTML tags in Common Crawl's raw response data (WARC files)
-+ count web server names in Common Crawl's metadata (WAT files) and/or WARC files
++ count web server names in Common Crawl's metadata (WAT files and/or WARC files)
++ list host names and corresponding IP addresses (WAT files and/or WARC files)
 + word count (term and document frequency) in Common Crawl's extracted text (WET files)
 + extract links from WAT files and construct the (host-level) web graph
 
