@@ -215,11 +215,10 @@ class CCSparkJob(object):
 
             no_parse = (not self.warc_parse_http_header)
             try:
-                for record in ArchiveIterator(stream,
-                                              no_record_parse=no_parse):
-                    for res in self.process_record(record):
-                        yield res
-                    self.records_processed.add(1)
+                archive_iterator = ArchiveIterator(stream,
+                                                   no_record_parse=no_parse)
+                for res in self.iterate_records(uri, archive_iterator):
+                    yield res
             except ArchiveLoadFailed as exception:
                 self.warc_input_failed.add(1)
                 self.get_logger().error(
@@ -229,6 +228,20 @@ class CCSparkJob(object):
 
     def process_record(self, record):
         raise NotImplementedError('Processing record needs to be customized')
+
+    def iterate_records(self, _warc_uri, archive_iterator):
+        """Iterate over all WARC records. This method can be customized
+           and allows to access also values from ArchiveIterator, namely
+           WARC record offset and length."""
+        for record in archive_iterator:
+            for res in self.process_record(record):
+                yield res
+            self.records_processed.add(1)
+            # WARC record offset and length should be read after the record
+            # has been processed, otherwise the record content is consumed
+            # while offset and length are determined:
+            #  warc_record_offset = archive_iterator.get_record_offset()
+            #  warc_record_length = archive_iterator.get_record_length()
 
     @staticmethod
     def is_wet_text_record(record):
