@@ -254,8 +254,9 @@ class ExtractHostLinksJob(ExtractLinksJob):
         if parts[-1] == '':
             # trailing dot is allowed, strip it
             parts = parts[0:-1]
-        if parts[0] == 'www' and len(parts) > 1:
-            # strip leading 'www' to reduce number of "duplicate" hosts
+        if len(parts) > 2 and parts[0] == 'www':
+            # strip leading 'www' to reduce number of "duplicate" hosts,
+            # but leave at least 2 trailing parts (www.com is a valid domain)
             parts = parts[1:]
         if len(parts) <= 1:
             # do not accept single-word hosts, must be at least `domain.tld'
