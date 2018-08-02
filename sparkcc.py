@@ -10,6 +10,11 @@ import botocore
 
 from warcio.archiveiterator import ArchiveIterator
 from warcio.recordloader import ArchiveLoadFailed
+# work-around to enable support of WARC/1.1 in warcio,
+# cf. https://github.com/webrecorder/warcio/issues/37
+from warcio.recordloader import ArcWarcRecordLoader
+if 'WARC/1.1' not in ArcWarcRecordLoader.WARC_TYPES:
+    ArcWarcRecordLoader.WARC_TYPES.append('WARC/1.1')
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
