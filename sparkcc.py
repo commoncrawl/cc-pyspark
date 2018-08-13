@@ -123,7 +123,7 @@ class CCSparkJob:
         self.log_aggregator(sc, self.warc_input_processed,
                             'WARC input files processed = {}')
         self.log_aggregator(sc, self.warc_input_failed,
-                            'records processed = {}')
+                            'WARC input files failed = {}')
         self.log_aggregator(sc, self.records_processed,
                             'records processed = {}')
 
