@@ -81,14 +81,15 @@ def download_page(record):
 
 
 index_list = ['2017-39']
-domain = 'nytimes.com/section/world'
+domain = 'nytimes.com/section/technology'
 nyt_urls = []
 word_list = []
 
 nyt = search_domain(domain)
-nyt_sub = nyt[10:11]
 
-def build_table():
+
+def build_table(n):
+    nyt_sub = nyt[10:10+n]
     for i in nyt_sub:
         nyt_urls.append(i['url'])
 
