@@ -6,5 +6,5 @@ warcio
 # for link extraction and webgraph construction also:
 idna
 
-# for hdfs support:
-pydoop
+# for hdfs support (requires environments variables JAVA_HOME and HADOOP_HOME ):
+#pydoop
