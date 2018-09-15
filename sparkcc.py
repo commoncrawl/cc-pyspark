@@ -17,7 +17,6 @@ from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext, SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 
-
 LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 
 
@@ -219,8 +218,16 @@ class CCSparkJob(object):
                 warctemp.seek(0)
                 stream = warctemp
             elif uri.startswith('hdfs://'):
-                self.get_logger().error("HDFS input not implemented: " + uri)
-                continue
+                try:
+                    import pydoop.hdfs as hdfs
+                    self.get_logger().error("Reading from HDFS {}".format(uri))
+                    uri = uri[6:]
+                    stream = hdfs.open(uri)
+                except RuntimeError as exception:
+                    self.get_logger().error(
+                        'Failed to open {}: {}'.format(uri, exception))
+                    self.warc_input_failed.add(1)
+                    continue
             else:
                 self.get_logger().info('Reading local stream {}'.format(uri))
                 if uri.startswith('file:'):
