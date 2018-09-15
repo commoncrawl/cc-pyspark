@@ -5,3 +5,6 @@ warcio
 
 # for link extraction and webgraph construction also:
 idna
+
+# for hdfs support:
+pydoop
