@@ -89,6 +89,8 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 3. don't forget to deploy all dependencies in the cluster, see [advanced dependency management](http://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management)
 
+4. also the the file `sparkcc.py` needs to be deployed or added as argument `--py-files sparkcc.py` to `spark-submit`. Note: some of the examples require further Python files as dependencies.
+
 
 ## Credits
 

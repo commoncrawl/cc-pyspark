@@ -305,7 +305,7 @@ class CCIndexSparkJob(CCSparkJob):
         sqldf.explain()
         return sqldf
 
-    def load_dataframe(self, sc, repartition=False):
+    def load_dataframe(self, sc, partitions=-1):
         session = SparkSession.builder.config(conf=sc.getConf()).getOrCreate()
         if self.args.query is not None:
             self.load_table(sc, session, self.args.input, self.args.table)
@@ -319,16 +319,15 @@ class CCIndexSparkJob(CCSparkJob):
         self.get_logger(sc).info(
             "Number of records/rows matched by query: {}".format(num_rows))
 
-        if repartition and self.args.num_output_partitions > 0:
+        if partitions > 0:
             self.get_logger(sc).info(
-                "Repartitioning data to {} output partitions".format(
-                    self.args.num_output_partitions))
-            sqldf = sqldf.repartition(self.args.num_output_partitions)
+                "Repartitioning data to {} partitions".format(partitions))
+            sqldf = sqldf.repartition(partitions)
 
         return sqldf
 
     def run_job(self, sc, sqlc):
-        sqldf = self.load_dataframe(sc, True)
+        sqldf = self.load_dataframe(sc, self.args.num_output_partitions)
 
         sqldf.write \
             .format(self.args.output_format) \
@@ -383,7 +382,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
                     .format(url, warc_path, offset, length, exception))
 
     def run_job(self, sc, sqlc):
-        sqldf = self.load_dataframe(sc, False)
+        sqldf = self.load_dataframe(sc, self.args.num_input_partitions)
 
         warc_recs = sqldf.select("url", "warc_filename", "warc_record_offset",
                                  "warc_record_length").rdd
