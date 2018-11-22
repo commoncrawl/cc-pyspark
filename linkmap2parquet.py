@@ -29,7 +29,8 @@ class LinkMapImportJob(CCSparkJob):
           .coalesce(self.args.num_output_partitions) \
           .sortWithinPartitions('s', 't') \
           .write \
-          .format("parquet") \
+          .format(self.args.output_format) \
+          .option("compression", self.args.output_compression) \
           .saveAsTable(self.args.output)
 
 

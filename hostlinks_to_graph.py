@@ -10,7 +10,7 @@ from iana_tld import iana_tld_list
 
 class HostLinksToGraph(CCSparkJob):
     '''Construct host-level webgraph from table with link pairs
-     <from_host, to_host> (input is Parquet table with reversed host names).'''
+     <from_host, to_host> (input is a table with reversed host names).'''
 
     name = "LinksToGraph"
 
@@ -88,7 +88,8 @@ class HostLinksToGraph(CCSparkJob):
                 .text(os.path.join(self.args.save_as_text, "vertices"),
                       compression="gzip")
         ids.write \
-           .format("parquet") \
+           .format(self.args.output_format) \
+           .option("compression", self.args.output_compression) \
            .saveAsTable(self.args.output + '_vertices')
 
         return ids
@@ -96,12 +97,12 @@ class HostLinksToGraph(CCSparkJob):
     def run_job(self, sc, sqlc):
 
         # read edges  s -> t  (host names)
-        edges = sqlc.read.parquet(self.args.input)
+        edges = sqlc.read.load(self.args.input)
 
         if self.args.add_input:
             # merge multiple input graphs
             for add_input in self.args.add_input:
-                add_edges = sqlc.read.parquet(add_input)
+                add_edges = sqlc.read.load(add_input)
                 edges = edges.union(add_edges)
             # remove duplicates and sort
             edges = edges \
@@ -109,7 +110,7 @@ class HostLinksToGraph(CCSparkJob):
                 .sortWithinPartitions('s', 't')
 
         if self.args.vertex_ids is not None:
-            ids = sqlc.read.parquet(self.args.vertex_ids)
+            ids = sqlc.read.load(self.args.vertex_ids)
         else:
             ids = self.vertices_assign_ids(sc, sqlc, edges)
 
@@ -129,7 +130,8 @@ class HostLinksToGraph(CCSparkJob):
                        compression="gzip")
             # TODO: save as adjacency list
         edges.write \
-             .format("parquet") \
+             .format(self.args.output_format) \
+             .option("compression", self.args.output_compression) \
              .saveAsTable(self.args.output + '_edges')
 
 

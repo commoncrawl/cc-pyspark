@@ -26,7 +26,7 @@ class ServerIPAddressJob(CCSparkJob):
     ])
 
     response_no_ip_address = '(no IP address)'
-    response_no_host  = '(no host name)'
+    response_no_host = '(no host name)'
 
     def process_record(self, record):
         ip_address = None

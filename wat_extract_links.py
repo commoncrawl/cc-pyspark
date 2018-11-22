@@ -144,14 +144,18 @@ class ExtractLinksJob(CCSparkJob):
                 url, e))
             self.records_failed.add(1)
 
+    def init_accumulators(self, sc):
+        super(ExtractLinksJob, self).init_accumulators(sc)
+
+        self.records_failed = sc.accumulator(0)
+        self.records_non_html = sc.accumulator(0)
+        self.records_response = sc.accumulator(0)
+        self.records_response_wat = sc.accumulator(0)
+        self.records_response_warc = sc.accumulator(0)
+        self.records_response_redirect = sc.accumulator(0)
+
     def log_aggregators(self, sc):
-        # super(ExtractHostLinksJob, self).log_aggregators(sc)
-        self.log_aggregator(sc, self.warc_input_processed,
-                            'WARC input files processed = {}')
-        self.log_aggregator(sc, self.warc_input_failed,
-                            'WARC input files failed = {}')
-        self.log_aggregator(sc, self.records_processed,
-                            'records processed = {}')
+        super(ExtractLinksJob, self).log_aggregators(sc)
 
         self.log_aggregator(sc, self.records_response,
                             'response records = {}')
@@ -167,13 +171,6 @@ class ExtractLinksJob(CCSparkJob):
                             'response records redirects = {}')
 
     def run_job(self, sc, sqlc):
-        self.records_failed = sc.accumulator(0)
-        self.records_non_html = sc.accumulator(0)
-        self.records_response = sc.accumulator(0)
-        self.records_response_wat = sc.accumulator(0)
-        self.records_response_warc = sc.accumulator(0)
-        self.records_response_redirect = sc.accumulator(0)
-
         output = None
         if self.args.input != '':
             input_data = sc.textFile(
@@ -187,7 +184,8 @@ class ExtractLinksJob(CCSparkJob):
             if output is not None:
                 sqlc.createDataFrame(output, schema=self.output_schema) \
                     .write \
-                    .format("parquet") \
+                    .format(self.args.output_format) \
+                    .option("compression", self.args.output_compression) \
                     .saveAsTable(self.args.intermediate_output)
                 self.log_aggregators(sc)
             warehouse_dir = sc.getConf().get('spark.sql.warehouse.dir',
@@ -200,7 +198,8 @@ class ExtractLinksJob(CCSparkJob):
           .coalesce(self.args.num_output_partitions) \
           .sortWithinPartitions('s', 't') \
           .write \
-          .format("parquet") \
+          .format(self.args.output_format) \
+          .option("compression", self.args.output_compression) \
           .saveAsTable(self.args.output)
 
         self.log_aggregators(sc)

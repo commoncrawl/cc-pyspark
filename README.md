@@ -4,11 +4,14 @@
 
 This project provides examples how to process the Common Crawl dataset with [Apache Spark](http://spark.apache.org/) and Python:
 
-+ count HTML tags in Common Crawl's raw response data (WARC files)
-+ count web server names in Common Crawl's metadata (WAT files and/or WARC files)
-+ list host names and corresponding IP addresses (WAT files and/or WARC files)
-+ word count (term and document frequency) in Common Crawl's extracted text (WET files)
-+ extract links from WAT files and construct the (host-level) web graph
++ [count HTML tags](./html_tag_count.py) in Common Crawl's raw response data (WARC files)
++ [count web server names](./server_count.py) in Common Crawl's metadata (WAT files or WARC files)
++ list host names and corresponding [IP addresses](./server_ip_address.py) (WAT files or WARC files)
++ [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
++ [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](/commoncrawl/cc-webgraph)
++ work with the [columnar URL index](http://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/):
+  - run a SQL query and [export the result as a table](./cc_index_export.py)
+  - select WARC records by a SQL query, parse the HTML, extract the text and [counts word](./cc_index_word_count.py)
 
 
 ## Setup
@@ -17,12 +20,12 @@ To develop and test locally, you will need to install
 * Spark, see the [detailed instructions](http://spark.apache.org/docs/latest/), and
 * all required Python modules by running
 ```
-    pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Compatibility and Requirements
 
-Tested with Spark 2.1.0 - 2.3.0 in combination with Python 2.7 and/or 3.5.
+Tested with Spark 2.1.0 - 2.4.0 in combination with Python 2.7 or 3.5 and 3.6.
 
 
 ## Get Sample Data
@@ -43,7 +46,7 @@ First, point the environment variable `SPARK_HOME` to your Spark installation.
 Then submit a job via
 
 ```
-   $SPARK_HOME/bin/spark-submit ./server_count.py \
+$SPARK_HOME/bin/spark-submit ./server_count.py \
 	--num_output_partitions 1 --log_level WARN \
 	./input/test_warc.txt servernames
 ```
