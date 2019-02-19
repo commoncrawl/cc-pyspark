@@ -8,8 +8,8 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 + [count web server names](./server_count.py) in Common Crawl's metadata (WAT files or WARC files)
 + list host names and corresponding [IP addresses](./server_ip_address.py) (WAT files or WARC files)
 + [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
-+ [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](/commoncrawl/cc-webgraph)
-+ work with the [columnar URL index](http://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (cf. [cc-index-table](/commmoncrawl/cc-index-table)):
++ [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](//github.com/commoncrawl/cc-webgraph)
++ work with the [columnar URL index](http://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (cf. [cc-index-table](//github.com/commoncrawl/cc-index-table)):
   - run a SQL query and [export the result as a table](./cc_index_export.py)
   - select WARC records by a SQL query, parse the HTML, extract the text and [counts word](./cc_index_word_count.py)
 
