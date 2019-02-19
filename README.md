@@ -9,7 +9,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 + list host names and corresponding [IP addresses](./server_ip_address.py) (WAT files or WARC files)
 + [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
 + [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](/commoncrawl/cc-webgraph)
-+ work with the [columnar URL index](http://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/):
++ work with the [columnar URL index](http://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (cf. [cc-index-table](/commmoncrawl/cc-index-table)):
   - run a SQL query and [export the result as a table](./cc_index_export.py)
   - select WARC records by a SQL query, parse the HTML, extract the text and [counts word](./cc_index_word_count.py)
 
@@ -92,9 +92,17 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 4. also the the file `sparkcc.py` needs to be deployed or added as argument `--py-files sparkcc.py` to `spark-submit`. Note: some of the examples require further Python files as dependencies.
 
 
+### Command-line options
+
+All examples show the available command-line options if called with the parameter `--help` or `-h`, e.g.
+```
+$SPARK_HOME/bin/spark-submit ./server_count.py --help
+```
+
+
 ## Credits
 
-Examples are ported from Stephen Merity's [cc-mrjob](//github.com/commoncrawl/cc-mrjob/) with a couple of upgrades:
+Examples are originally ported from Stephen Merity's [cc-mrjob](//github.com/commoncrawl/cc-mrjob/) with the following changes and upgrades:
 * based on Apache Spark (instead of [mrjob](https://pythonhosted.org/mrjob/))
 * [boto3](http://boto3.readthedocs.io/) supporting multi-part download of data from S3
 * [warcio](https://github.com/webrecorder/warcio) a Python 2 and Python 3 compatible module to access WARC files
