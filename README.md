@@ -11,7 +11,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 + [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](//github.com/commoncrawl/cc-webgraph)
 + work with the [columnar URL index](http://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (cf. [cc-index-table](//github.com/commoncrawl/cc-index-table)):
   - run a SQL query and [export the result as a table](./cc_index_export.py)
-  - select WARC records by a SQL query, parse the HTML, extract the text and [counts word](./cc_index_word_count.py)
+  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py)
 
 
 ## Setup
@@ -25,12 +25,12 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with Spark 2.1.0 - 2.4.0 in combination with Python 2.7 or 3.5 and 3.6.
+Tested with Spark 2.1.0 – 2.4.1 in combination with Python 2.7 or 3.5 and 3.6.
 
 
 ## Get Sample Data
 
-To develop locally, you'll need at least three data files -- one for each format the crawl uses. They can be fetched from the following links:
+To develop locally, you'll need at least three data files – one for each format used in at least one of the examples. They can be fetched from the following links:
 * [warc.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/warc/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.gz)
 * [wat.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wat/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wat.gz)
 * [wet.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wet/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wet.gz)
@@ -38,6 +38,8 @@ To develop locally, you'll need at least three data files -- one for each format
 Alternatively, running `get-data.sh` will download the sample data. It also writes input files containing
 * sample input as `file://` URLs
 * all input of one monthly crawl as `s3://` URLs
+
+Note that the sample data is from an older crawl (`CC-MAIN-2017-13` run in March 2017). If you want to use more recent data, please visit the [Common Crawl site](https://commoncrawl.org/the-data/get-started/).
 
 
 ### Running locally
@@ -51,12 +53,12 @@ $SPARK_HOME/bin/spark-submit ./server_count.py \
 	./input/test_warc.txt servernames
 ```
 
-This will count web server names sent in HTTP response headers for the sample WARC input and store the resulting counts in the SparkSQL table "servernames" in your ... (usually in `./spark-warehouse/servernames`). The 
+This will count web server names sent in HTTP response headers for the sample WARC input and store the resulting counts in the SparkSQL table "servernames" in your warehouse location defined by `spark.sql.warehouse.dir` (usually in your working directory as `./spark-warehouse/servernames`).
 
 The output table can be accessed via SparkSQL, e.g.,
 
 ```
-$SPARK_HOME/spark/bin/pyspark
+$SPARK_HOME/bin/pyspark
 >>> df = sqlContext.read.parquet("spark-warehouse/servernames")
 >>> for row in df.sort(df.val.desc()).take(10): print(row)
 ... 
