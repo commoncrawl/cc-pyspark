@@ -37,6 +37,17 @@ class ExtractLinksJob(CCSparkJob):
     http_redirect_location_pattern = re.compile(b'^Location:\s*(\S+)',
                                                 re.IGNORECASE)
 
+    # Meta properties usually offering links:
+    #   <meta property="..." content="https://..." />
+    html_meta_property_links = {
+        'og:url', 'og:image', 'og:image:secure_url',
+        'og:video', 'og:video:url', 'og:video:secure_url',
+        'twitter:url', 'twitter:image:src'}
+    # Meta names usually offering links
+    html_meta_links = {
+        'twitter:image', 'thumbnail', 'application-url',
+        'msapplication-starturl', 'msapplication-TileImage', 'vb_meta_bburl'}
+
     def add_arguments(self, parser):
         parser.add_argument("--intermediate_output", type=str,
                             default=None,
@@ -98,13 +109,20 @@ class ExtractLinksJob(CCSparkJob):
         if src != target:
             yield src, target
 
-    def yield_links(self, from_url, base_url, links, url_attr='url'):
+    def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
         # base_url = urlparse(base)
         if base_url is None:
             base_url = from_url
         for l in links:
+            link = None
             if url_attr in l:
                 link = l[url_attr]
+            elif opt_attr in l:
+                link = l[opt_attr]
+                if not (link.startswith('http://')
+                        or link.startswith('https://')):
+                    link = None
+            if link is not None:
                 # lurl = _url_join(base_url, urlparse(link)).geturl()
                 try:
                     lurl = urljoin(base_url, link)
@@ -129,16 +147,27 @@ class ExtractLinksJob(CCSparkJob):
                         pass
                 if 'Link' in head:
                     # <link ...>
-                    for l in self.yield_links(url, base, head['Link']):
+                    for l in self.yield_links(url, base, head['Link'], 'url'):
                         yield l
                 if 'Metas' in head:
                     for m in head['Metas']:
-                        if 'property' in m and m['property'] == 'og:url':
+                        if (('property' in m and m['property']
+                             in ExtractLinksJob.html_meta_property_links)
+                            or ('name' in m and m['name']
+                                in ExtractLinksJob.html_meta_links)
+                            or ('content' in m and
+                                (m['content'].startswith('http://')
+                                 or m['content'].startswith('https://')))):
                             for l in self.yield_links(url, base, [m], 'content'):
                                 yield l
+                if 'Scripts' in head:
+                    for l in self.yield_links(url, base, head['Scripts'], 'url'):
+                        yield l
             if 'Links' in html_meta:
-                for l in self.yield_links(url, base, html_meta['Links']):
+                for l in self.yield_links(url, base, html_meta['Links'],
+                                          'url', 'href'):
                     yield l
+
         except KeyError as e:
             self.get_logger().error("Failed to parse record for {}: {}".format(
                 url, e))
@@ -277,7 +306,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
         parts.reverse()
         return '.'.join(parts)
 
-    def yield_links(self, from_url, base_url, links, url_attr='url'):
+    def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
         from_host = ExtractHostLinksJob.get_surt_host(from_url)
         if from_host is None:
             return
@@ -288,20 +317,28 @@ class ExtractHostLinksJob(ExtractLinksJob):
                 continue
             if url_attr in l:
                 link = l[url_attr]
-                if self.global_link_pattern.match(link):
-                    try:
-                        thost = ExtractHostLinksJob.get_surt_host(link)
-                        if thost is None:
-                            pass  # no host, e.g., http:///abc/, file:///C:...
-                        else:
-                            target_hosts.add(thost)
-                    except ValueError:
-                        pass
-                else:
-                    inner_host_links += 1
+            elif opt_attr in l:
+                link = l[opt_attr]
+                if not (link.startswith('http://')
+                        or link.startswith('https://')):
+                    continue
+            else:
+                continue
+            if self.global_link_pattern.match(link):
+                try:
+                    thost = ExtractHostLinksJob.get_surt_host(link)
+                    if thost is None:
+                        pass  # no host, e.g., http:///abc/, file:///C:...
+                    elif thost == from_host:
+                        pass  # global link to same host
+                    else:
+                        target_hosts.add(thost)
+                except ValueError:
+                    pass
+            else:
+                inner_host_links += 1
         for t in target_hosts:
-            if t != from_host:
-                yield from_host, t
+            yield from_host, t
         if inner_host_links > 0 and base_url is not None:
             base_host = ExtractHostLinksJob.get_surt_host(base_url)
             if base_host is not None and base_host != from_host:
