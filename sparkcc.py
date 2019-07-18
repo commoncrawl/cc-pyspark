@@ -64,7 +64,9 @@ class CCSparkJob(object):
 
         arg_parser.add_argument("--num_input_partitions", type=int,
                                 default=self.num_input_partitions,
-                                help="Number of input splits/partitions")
+                                help="Number of input splits/partitions, "
+                                "number of parallel tasks to process WARC "
+                                "files/records")
         arg_parser.add_argument("--num_output_partitions", type=int,
                                 default=self.num_output_partitions,
                                 help="Number of output partitions")
@@ -376,7 +378,9 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
                             help="SQL query to select rows. Note: the result "
                             "is required to contain the columns `url', `warc"
                             "_filename', `warc_record_offset' and `warc_record"
-                            "_length', make sure they're SELECTed.")
+                            "_length', make sure they're SELECTed. The column"
+                            "`content_charset' is optional and is utilized to"
+                            "read WARC record payloads with the right encoding.")
         agroup.add_argument("--csv", default=None,
                             help="CSV file to load WARC records by filename, "
                             "offset and length. The CSV file must have column "
@@ -392,10 +396,13 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
         no_parse = (not self.warc_parse_http_header)
 
         for row in rows:
-            url = row[0]
-            warc_path = row[1]
-            offset = int(row[2])
-            length = int(row[3])
+            url = row['url']
+            warc_path = row['warc_filename']
+            offset = int(row['warc_record_offset'])
+            length = int(row['warc_record_length'])
+            content_charset = None
+            if 'content_charset' in row:
+                content_charset = row['content_charset']
             self.get_logger().debug("Fetching WARC record for {}".format(url))
             rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
             try:
@@ -412,6 +419,8 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             try:
                 for record in ArchiveIterator(record_stream,
                                               no_record_parse=no_parse):
+                    # pass `content_charset` forward to subclass processing WARC records
+                    record.rec_headers['WARC-Identified-Content-Charset'] = content_charset
                     for res in self.process_record(record):
                         yield res
                     self.records_processed.add(1)
@@ -424,8 +433,10 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
     def run_job(self, sc, sqlc):
         sqldf = self.load_dataframe(sc, self.args.num_input_partitions)
 
-        warc_recs = sqldf.select("url", "warc_filename", "warc_record_offset",
-                                 "warc_record_length").rdd
+        columns = ['url', 'warc_filename', 'warc_record_offset', 'warc_record_length']
+        if 'content_charset' in sqldf.columns:
+            columns.append('content_charset')
+        warc_recs = sqldf.select(*columns).rdd
 
         output = warc_recs.mapPartitions(self.fetch_process_warc_records) \
             .reduceByKey(self.reduce_by_key_func)
