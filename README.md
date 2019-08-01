@@ -25,7 +25,7 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with Spark 2.1.0 – 2.4.1 in combination with Python 2.7 or 3.5 and 3.6.
+Tested with Spark 2.1.0 – 2.4.3 in combination with Python 2.7 or 3.5 and 3.6.
 
 
 ## Get Sample Data

@@ -79,6 +79,8 @@ class CCSparkJob(object):
 
         arg_parser.add_argument("--log_level", default=self.log_level,
                                 help="Logging level")
+        arg_parser.add_argument("--spark-profiler", action='store_true',
+                                help="Enable PySpark profiler")
 
         self.add_arguments(arg_parser)
         args = arg_parser.parse_args()
@@ -124,6 +126,10 @@ class CCSparkJob(object):
             ("spark.locality.wait", "20s"),
             ("spark.serializer", "org.apache.spark.serializer.KryoSerializer"),
         ))
+
+        if self.args.spark_profiler:
+            conf = conf.set("spark.python.profile", "true")
+
         sc = SparkContext(
             appName=self.name,
             conf=conf)
@@ -132,6 +138,8 @@ class CCSparkJob(object):
         self.init_accumulators(sc)
 
         self.run_job(sc, sqlc)
+        if self.args.spark_profiler:
+            sc.show_profiles()
 
         sc.stop()
 
