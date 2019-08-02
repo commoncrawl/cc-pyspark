@@ -29,7 +29,7 @@ class TruncatedStatsJob(CCSparkJob):
     content_limit = 2**20
 
     def add_arguments(self, parser):
-        parser.add_argument("--output_option", action='append',
+        parser.add_argument("--output_option", action='append', default=[],
                             help="Additional output option pair"
                             "(split at `=`: <option_name>=<option_value>)")
 
@@ -69,8 +69,16 @@ class TruncatedStatsJob(CCSparkJob):
                 'x-crawler-content-length', -1))
             http_orig_content_encoding = record.http_headers.get_header(
                 'x-crawler-content-encoding', '')
+            if http_orig_content_encoding == '':
+                # (for crawls before CC-MAIN-2018-34)
+                http_orig_content_encoding = record.http_headers.get_header(
+                    'content-encoding', '')
             http_orig_transfer_encoding = record.http_headers.get_header(
                 'x-crawler-transfer-encoding', '')
+            if http_orig_transfer_encoding == '':
+                # (for crawls before CC-MAIN-2018-34)
+                http_orig_transfer_encoding = record.http_headers.get_header(
+                    'transfer-encoding', '')
             warc_record_offset = archive_iterator.get_record_offset()
             warc_record_length = archive_iterator.get_record_length()
             warc_file = _warc_uri.split('/')[-1]
