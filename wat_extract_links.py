@@ -252,27 +252,35 @@ class ExtractHostLinksJob(ExtractLinksJob):
     #   https://tools.ietf.org/html/rfc3986#section-3.1
     # - or starting with //
     #   (all other "relative" links are within the same host)
-    global_link_pattern = re.compile('^(?:[a-z][a-z0-9]{1,5}:)?//',
+    global_link_pattern = re.compile(r'^(?:[a-z][a-z0-9]{1,5}:)?//',
                                      re.IGNORECASE)
 
     # match IP addresses
     # - including IPs with leading `www.' (stripped)
-    ip_pattern = re.compile('^(?:www\.)?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\Z')
+    ip_pattern = re.compile(r'^(?:www\.)?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\Z')
 
     # valid host names, relaxed allowing underscore, allowing also IDNs
     # https://en.wikipedia.org/wiki/Hostname#Restrictions_on_valid_hostnames
-    host_part_pattern = re.compile('^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?\Z',
+    host_part_pattern = re.compile(r'^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?\Z',
                                    re.IGNORECASE)
+
+    # simple pattern to match many but not all host names in URLs
+    url_parse_host_pattern = re.compile(r'^https?://([a-z0-9_.-]{2,253})(?:[/?#]|\Z)',
+                                        re.IGNORECASE)
 
     @staticmethod
     def get_surt_host(url):
-        try:
-            host = urlparse(url).hostname
-        except:
-            # self.get_logger().debug("Failed to parse URL {}: {}".format(url, e))
-            return None
-        if host is None:
-            return None
+        m = ExtractHostLinksJob.url_parse_host_pattern.match(url)
+        if m:
+            host = m.group(1)
+        else:
+            try:
+                host = urlparse(url).hostname
+            except:
+                # self.get_logger().debug("Failed to parse URL {}: {}".format(url, e))
+                return None
+            if host is None:
+                return None
         host = host.strip().lower()
         if len(host) < 1 or len(host) > 253:
             return None
@@ -282,15 +290,17 @@ class ExtractHostLinksJob(ExtractLinksJob):
         if parts[-1] == '':
             # trailing dot is allowed, strip it
             parts = parts[0:-1]
+        if len(parts) <= 1:
+            # do not accept single-word hosts, must be at least `domain.tld'
+            return None
         if len(parts) > 2 and parts[0] == 'www':
             # strip leading 'www' to reduce number of "duplicate" hosts,
             # but leave at least 2 trailing parts (www.com is a valid domain)
             parts = parts[1:]
-        if len(parts) <= 1:
-            # do not accept single-word hosts, must be at least `domain.tld'
-            return None
         for i in range(0, len(parts)):
             part = parts[i]
+            if len(part) > 63:
+                return None
             if not ExtractHostLinksJob.host_part_pattern.match(part):
                 try:
                     idn = idna.encode(part).decode('ascii')
