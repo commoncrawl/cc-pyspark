@@ -36,6 +36,7 @@ class ExtractLinksJob(CCSparkJob):
     http_redirect_pattern = re.compile(b'^HTTP\s*/\s*1\.[01]\s*30[1278]\\b')
     http_redirect_location_pattern = re.compile(b'^Location:\s*(\S+)',
                                                 re.IGNORECASE)
+    http_link_pattern = re.compile(r'<([^>]*)>')
 
     # Meta properties usually offering links:
     #   <meta property="..." content="https://..." />
@@ -102,12 +103,20 @@ class ExtractLinksJob(CCSparkJob):
                         yield link
                     return
                 elif line.strip() == '':
+                    # end of HTTP header
                     return
                 line = stream.readline()
 
     def yield_redirect(self, src, target, http_status_line):
         if src != target:
             yield src, target
+
+    def yield_http_header_links(self, url, headers):
+        if 'Content-Location' in headers:
+            yield url, headers['Content-Location']
+        if 'Link' in headers:
+            for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
+                yield url, m.group(1)
 
     def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
         # base_url = urlparse(base)
@@ -133,6 +142,10 @@ class ExtractLinksJob(CCSparkJob):
     def get_links(self, url, record):
         try:
             response_meta = record['Envelope']['Payload-Metadata']['HTTP-Response-Metadata']
+            if 'Headers' in response_meta:
+                # extract links from HTTP header
+                for l in self.yield_http_header_links(url, response_meta['Headers']):
+                    yield l
             if 'HTML-Metadata' not in response_meta:
                 self.records_non_html.add(1)
                 return
@@ -363,6 +376,22 @@ class ExtractHostLinksJob(ExtractLinksJob):
         if thost is None or src_host is None or src_host == thost:
             return
         yield src_host, thost
+
+    def yield_http_header_links(self, url, headers):
+        links = []
+        if 'Content-Location' in headers:
+            links.append(headers['Content-Location'])
+        if 'Link' in headers:
+            for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
+                links.append(m.group(1))
+        if len(links) > 0:
+            src_host = ExtractHostLinksJob.get_surt_host(url)
+            if src_host is None:
+                return
+            for link in links:
+                host = ExtractHostLinksJob.get_surt_host(link)
+                if host is not None and src_host != host:
+                    yield src_host, host
 
 
 if __name__ == "__main__":
