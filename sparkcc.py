@@ -81,6 +81,14 @@ class CCSparkJob(object):
                                 help="Logging level")
         arg_parser.add_argument("--spark-profiler", action='store_true',
                                 help="Enable PySpark profiler")
+        arg_parser.add_argument("--minimum_executors", type=int,
+                                default=0,
+                                help="sets spark.dynamicAllocation.minExecutors")
+        arg_parser.add_argument("--maximum_executors", type=int,
+                                default=0,
+                                help="sets spark.dynamicAllocation.maxExecutors")
+        arg_parser.add_argument("--maximize_resource_allocation", action='store_true',
+                                help="sets maximizeResourceAllocation (EMR-specific option)")
 
         self.add_arguments(arg_parser)
         args = arg_parser.parse_args()
@@ -129,6 +137,14 @@ class CCSparkJob(object):
 
         if self.args.spark_profiler:
             conf = conf.set("spark.python.profile", "true")
+        if self.args.minimum_executors > 0:
+            conf = conf.set("spark.dynamicAllocation.enabled", "true")
+            conf = conf.set("spark.dynamicAllocation.minExecutors", self.args.minimum_executors)
+        if self.args.maximum_executors > 0:
+            conf = conf.set("spark.dynamicAllocation.enabled", "true")
+            conf = conf.set("spark.dynamicAllocation.maxExecutors", self.args.maximum_executors)
+        if self.args.maximize_resource_allocation:
+            conf = conf.set("maximizeResourceAllocation", "true")
 
         sc = SparkContext(
             appName=self.name,
