@@ -85,9 +85,7 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 1. spinning up the Spark cluster: [AWS EMR](https://aws.amazon.com/documentation/emr/) contains a ready-to-use Spark installation but you'll find multiple descriptions on the web how to deploy Spark on a cheap cluster of AWS spot instances. See also [launching Spark on a cluster](http://spark.apache.org/docs/latest/#launching-on-a-cluster).
 
-2. choose appropriate cluster-specific settings when [submitting jobs](http://spark.apache.org/docs/latest/submitting-applications.html) and also check for relevant command-line options (e.g., `--num_input_partitions` or `--num_output_partitions`) by running 
-
-  ./spark/bin/spark-submit ./server_count.py --help
+2. choose appropriate cluster-specific settings when [submitting jobs](http://spark.apache.org/docs/latest/submitting-applications.html) and also check for relevant command-line options (e.g., `--num_input_partitions` or `--num_output_partitions`, see below)
 
 3. don't forget to deploy all dependencies in the cluster, see [advanced dependency management](http://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management)
 
@@ -99,6 +97,20 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 All examples show the available command-line options if called with the parameter `--help` or `-h`, e.g.
 ```
 $SPARK_HOME/bin/spark-submit ./server_count.py --help
+```
+
+#### Overwriting Spark configuration properties
+
+There are many [Spark configuration properties](https://spark.apache.org/docs/latest/configuration.html) which allow to tune the job execution or output, see for example see [tuning Spark](https://spark.apache.org/docs/latest/tuning.html) or [EMR Spark memory tuning](https://aws.amazon.com/blogs/big-data/best-practices-for-successfully-managing-memory-for-apache-spark-applications-on-amazon-emr/).
+
+It's possible to overwrite Spark properties when [submitting the job](http://spark.apache.org/docs/latest/submitting-applications.html):
+
+```
+$SPARK_HOME/bin/spark-submit \
+    --conf spark.sql.warehouse.dir=myWareHouseDir \
+    ... (other Spark options, flags, config properties) \
+    ./server_count.py \
+	... (program-specific options)
 ```
 
 
