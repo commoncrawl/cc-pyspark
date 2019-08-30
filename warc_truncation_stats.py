@@ -1,5 +1,5 @@
 
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.types import StructType, StructField, StringType, LongType
 
 from sparkcc import CCSparkJob
 
@@ -13,12 +13,12 @@ class TruncatedStatsJob(CCSparkJob):
     output_schema = StructType([
         StructField("url", StringType(), False),
         StructField("warc_file", StringType(), False),
-        StructField("warc_record_offset", IntegerType(), False),
-        StructField("warc_record_length", IntegerType(), False),
-        StructField("warc_content_length", IntegerType(), False),
-        StructField("http_content_length", IntegerType(), True),
-        StructField("payload_length", IntegerType(), True),
-        StructField("http_orig_content_length", IntegerType(), True),
+        StructField("warc_record_offset", LongType(), False),
+        StructField("warc_record_length", LongType(), False),
+        StructField("warc_content_length", LongType(), False),
+        StructField("http_content_length", LongType(), True),
+        StructField("payload_length", LongType(), True),
+        StructField("http_orig_content_length", LongType(), True),
         StructField("http_orig_content_encoding", StringType(), True),
         StructField("http_orig_transfer_encoding", StringType(), True),
         StructField("truncated_reason", StringType(), True),
@@ -65,8 +65,15 @@ class TruncatedStatsJob(CCSparkJob):
                     'WARC-Identified-Payload-Type']
             http_content_type = record.http_headers.get_header(
                 'content-type', '')
-            http_orig_content_length = int(record.http_headers.get_header(
-                'x-crawler-content-length', -1))
+            http_orig_content_length = -1
+            try:
+                val = record.http_headers.get_header(
+                        'x-crawler-content-length', -1)
+                http_orig_content_length = int(val)
+            except ValueError as exception:
+                self.get_logger().warn(
+                        'Ignoring invalid X-Crawler-Content-Length: {} ({})'
+                        .format(val, exception))
             http_orig_content_encoding = record.http_headers.get_header(
                 'x-crawler-content-encoding', '')
             if http_orig_content_encoding == '':

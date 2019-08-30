@@ -12,6 +12,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 + work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (cf. [cc-index-table](/commoncrawl/cc-index-table)):
   - run a SQL query and [export the result as a table](./cc_index_export.py)
   - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py)
++ [extract WARC truncation metrics](./warc_truncation_stats.py) extract metrics about payload truncation in WARC records
 
 
 ## Setup
