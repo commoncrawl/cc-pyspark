@@ -3,8 +3,8 @@ from pyspark.sql.types import StructType, StructField, StringType
 
 
 class LinkMapImportJob(CCSparkJob):
-    '''Import a map of link pairs <from, to>
-       to SparkSQL and save as Parquet'''
+    """Import a map of link pairs <from, to>
+    to SparkSQL and save as Parquet"""
     name = "LinkMapImport"
 
     output_schema = StructType([

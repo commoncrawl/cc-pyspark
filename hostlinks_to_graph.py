@@ -9,8 +9,8 @@ from iana_tld import iana_tld_list
 
 
 class HostLinksToGraph(CCSparkJob):
-    '''Construct host-level webgraph from table with link pairs
-     <from_host, to_host> (input is a table with reversed host names).'''
+    """Construct host-level webgraph from table with link pairs
+    <from_host, to_host> (input is a table with reversed host names)."""
 
     name = "LinksToGraph"
 

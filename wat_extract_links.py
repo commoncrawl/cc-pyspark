@@ -1,7 +1,8 @@
 import idna
-import ujson as json
 import os
 import re
+
+import ujson as json
 
 try:
     # Python2
@@ -10,13 +11,14 @@ except ImportError:
     # Python3
     from urllib.parse import urljoin, urlparse
 
-from sparkcc import CCSparkJob
 from pyspark.sql.types import StructType, StructField, StringType
+
+from sparkcc import CCSparkJob
 
 
 class ExtractLinksJob(CCSparkJob):
-    '''Extract links from WAT files and redirects from WARC files'''
-    ''' and save them as pairs <from, to>'''
+    """Extract links from WAT files and redirects from WARC files
+    and save them as pairs <from, to>"""
     name = "ExtractLinks"
 
     output_schema = StructType([
@@ -26,17 +28,24 @@ class ExtractLinksJob(CCSparkJob):
 
     warc_parse_http_header = False
 
+    processing_robotstxt_warc = False
+
     records_response = None
     records_response_wat = None
     records_response_warc = None
+    records_response_robotstxt = None
     records_failed = None
     records_non_html = None
     records_response_redirect = None
 
-    http_redirect_pattern = re.compile(b'^HTTP\s*/\s*1\.[01]\s*30[1278]\\b')
-    http_redirect_location_pattern = re.compile(b'^Location:\s*(\S+)',
+    http_redirect_pattern = re.compile(b'^HTTP\\s*/\\s*1\\.[01]\\s*30[12378]\\b')
+    http_redirect_location_pattern = re.compile(b'^Location:\\s*(\\S+)',
                                                 re.IGNORECASE)
     http_link_pattern = re.compile(r'<([^>]*)>')
+    http_success_pattern = re.compile(b'^HTTP\\s*/\\s*1\\.[01]\\s*200\\b')
+    robotstxt_warc_path_pattern = re.compile(r'.*/robotstxt/')
+    robotstxt_sitemap_pattern = re.compile(b'^Sitemap:\\s*(\\S+)',
+                                           re.IGNORECASE)
 
     # Meta properties usually offering links:
     #   <meta property="..." content="https://..." />
@@ -60,6 +69,15 @@ class ExtractLinksJob(CCSparkJob):
         # TODO: canonicalize
         pass
 
+    def iterate_records(self, warc_uri, archive_iterator):
+        """Iterate over all WARC records and process them"""
+        self.processing_robotstxt_warc \
+            = ExtractLinksJob.robotstxt_warc_path_pattern.match(warc_uri)
+        for record in archive_iterator:
+            for res in self.process_record(record):
+                yield res
+            self.records_processed.add(1)
+
     def process_record(self, record):
         if self.is_wat_json_record(record):
             try:
@@ -82,30 +100,47 @@ class ExtractLinksJob(CCSparkJob):
             self.records_response_warc.add(1)
             stream = record.content_stream()
             http_status_line = stream.readline()
-            if ExtractLinksJob.http_redirect_pattern.match(http_status_line):
+            if (self.processing_robotstxt_warc and ExtractLinksJob
+                    .http_success_pattern.match(http_status_line)):
+                self.records_response_robotstxt.add(1)
+                for link in self.process_robotstxt(record, stream,
+                                                   http_status_line):
+                    yield link
+            elif ExtractLinksJob.http_redirect_pattern.match(http_status_line):
                 self.records_response_redirect.add(1)
-            else:
+                for link in self.process_redirect(record, stream,
+                                                  http_status_line):
+                    yield link
+
+    def process_redirect(self, record, stream, http_status_line):
+        """Process redirects (HTTP status code 30[12378])
+        and yield redirect links"""
+        line = stream.readline()
+        while line:
+            m = ExtractLinksJob.http_redirect_location_pattern.match(line)
+            if m:
+                redir_to = m.group(1).strip()
+                try:
+                    redir_to = redir_to.decode('utf-8')
+                except UnicodeError as e:
+                    self.get_logger().warn(
+                        'URL with unknown encoding: {} - {}'.format(
+                            redir_to, e))
+                    return
+                redir_from = record.rec_headers.get_header('WARC-Target-URI')
+                for link in self.yield_redirect(redir_from, redir_to,
+                                                http_status_line):
+                    yield link
+                return
+            elif line == b'\r\n':
+                # end of HTTP header
                 return
             line = stream.readline()
-            while line:
-                m = ExtractLinksJob.http_redirect_location_pattern.match(line)
-                if m:
-                    redir_to = m.group(1).strip()
-                    try:
-                        redir_to = redir_to.decode('utf-8')
-                    except UnicodeError as e:
-                        self.get_logger().warn(
-                            'URL with unknown encoding: {} - {}'.format(
-                                redir_to, e))
-                    redir_from = record.rec_headers.get_header('WARC-Target-URI')
-                    for link in self.yield_redirect(redir_from, redir_to,
-                                                    http_status_line):
-                        yield link
-                    return
-                elif line.strip() == '':
-                    # end of HTTP header
-                    return
-                line = stream.readline()
+
+    def process_robotstxt(self, record, stream, http_status_line):
+        # Robots.txt -> sitemap links are meaningful for host-level graphs,
+        # page-level graphs usually do not contain the robots.txt as a node
+        pass
 
     def yield_redirect(self, src, target, http_status_line):
         if src != target:
@@ -195,6 +230,7 @@ class ExtractLinksJob(CCSparkJob):
         self.records_response_wat = sc.accumulator(0)
         self.records_response_warc = sc.accumulator(0)
         self.records_response_redirect = sc.accumulator(0)
+        self.records_response_robotstxt = sc.accumulator(0)
 
     def log_aggregators(self, sc):
         super(ExtractLinksJob, self).log_aggregators(sc)
@@ -211,6 +247,8 @@ class ExtractLinksJob(CCSparkJob):
                             'response records WARC = {}')
         self.log_aggregator(sc, self.records_response_redirect,
                             'response records redirects = {}')
+        self.log_aggregator(sc, self.records_response_robotstxt,
+                            'response records robots.txt = {}')
 
     def run_job(self, sc, sqlc):
         output = None
@@ -248,9 +286,10 @@ class ExtractLinksJob(CCSparkJob):
 
 
 class ExtractHostLinksJob(ExtractLinksJob):
-    '''Extract links from WAT files and redirects from WARC files,
-     extract the host names, reverse the names (example.com -> com.example)
-     and save the pairs <from_host, to_host>.'''
+    """Extract links from WAT files, redirects from WARC files,
+    and sitemap links from robots.txt response records.
+    Extract the host names, reverse the names (example.com -> com.example)
+    and save the pairs <from_host, to_host>."""
 
     name = "ExtrHostLinks"
     output_schema = StructType([
@@ -310,8 +349,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
             # strip leading 'www' to reduce number of "duplicate" hosts,
             # but leave at least 2 trailing parts (www.com is a valid domain)
             parts = parts[1:]
-        for i in range(0, len(parts)):
-            part = parts[i]
+        for (i, part) in enumerate(parts):
             if len(part) > 63:
                 return None
             if not ExtractHostLinksJob.host_part_pattern.match(part):
@@ -384,7 +422,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
         if 'Link' in headers:
             for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
                 links.append(m.group(1))
-        if len(links) > 0:
+        if links:
             src_host = ExtractHostLinksJob.get_surt_host(url)
             if src_host is None:
                 return
@@ -392,6 +430,32 @@ class ExtractHostLinksJob(ExtractLinksJob):
                 host = ExtractHostLinksJob.get_surt_host(link)
                 if host is not None and src_host != host:
                     yield src_host, host
+
+    def process_robotstxt(self, record, stream, _http_status_line):
+        """Process robots.txt and yield sitemap links"""
+        line = stream.readline()
+        while line:
+            if line == b'\r\n':
+                # end of HTTP header
+                break
+            line = stream.readline()
+        line = stream.readline()
+        while line:
+            m = ExtractLinksJob.robotstxt_sitemap_pattern.match(line)
+            if m:
+                sitemap = m.group(1).strip()
+                try:
+                    sitemap = sitemap.decode('utf-8')
+                    from_robotstxt = record.rec_headers.get_header('WARC-Target-URI')
+                    src_host = ExtractHostLinksJob.get_surt_host(from_robotstxt)
+                    thost = ExtractHostLinksJob.get_surt_host(sitemap)
+                    if thost and src_host and src_host != thost:
+                        yield src_host, thost
+                except UnicodeError as e:
+                    self.get_logger().warn(
+                        'URL with unknown encoding: {} - {}'.format(
+                            sitemap, e))
+            line = stream.readline()
 
 
 if __name__ == "__main__":
