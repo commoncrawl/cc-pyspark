@@ -55,7 +55,8 @@ class CCSparkJob(object):
         if self.__doc__ is not None:
             description += " - "
             description += self.__doc__
-        arg_parser = argparse.ArgumentParser(description=description)
+        arg_parser = argparse.ArgumentParser(prog=self.name, description=description,
+                                             conflict_handler='resolve')
 
         arg_parser.add_argument("input", help=self.input_descr)
         arg_parser.add_argument("output", help=self.output_descr)
@@ -287,20 +288,11 @@ class CCIndexSparkJob(CCSparkJob):
     input_descr = "Path to Common Crawl index table"
 
     def add_arguments(self, parser):
-        parser.add_argument("--query", default=None,
-                            help="SQL query to select rows. Note: the result "
-                            "is required to contain the columns `url', `warc"
-                            "_filename', `warc_record_offset' and `warc_record"
-                            "_length', make sure they're SELECTed.")
-        parser.add_argument("--csv", default=None,
-                            help="CSV file to load WARC records by filename, "
-                            "offset and length. The CSV file must have column "
-                            "headers and the input columns `url', `warc"
-                            "_filename', `warc_record_offset' and `warc_record"
-                            "_length' are mandatory, see also option --query.")
         parser.add_argument("--table", default="ccindex",
                             help="name of the table data is loaded into"
                             " (default: ccindex)")
+        parser.add_argument("--query", default=None, required=True,
+                            help="SQL query to select rows (required).")
 
     def validate_arguments(self, args):
         if args.csv is None and args.query is None:
@@ -363,6 +355,21 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
     """
 
     name = "CCIndexWarcSparkJob"
+
+    def add_arguments(self, parser):
+        super(CCIndexWarcSparkJob, self).add_arguments(parser)
+        agroup = parser.add_mutually_exclusive_group(required=True)
+        agroup.add_argument("--query", default=None,
+                            help="SQL query to select rows. Note: the result "
+                            "is required to contain the columns `url', `warc"
+                            "_filename', `warc_record_offset' and `warc_record"
+                            "_length', make sure they're SELECTed.")
+        agroup.add_argument("--csv", default=None,
+                            help="CSV file to load WARC records by filename, "
+                            "offset and length. The CSV file must have column "
+                            "headers and the input columns `url', `warc"
+                            "_filename', `warc_record_offset' and `warc_record"
+                            "_length' are mandatory, see also option --query.")
 
     def fetch_process_warc_records(self, rows):
         no_sign_request = botocore.client.Config(
