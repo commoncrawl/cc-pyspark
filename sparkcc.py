@@ -294,17 +294,6 @@ class CCIndexSparkJob(CCSparkJob):
         parser.add_argument("--query", default=None, required=True,
                             help="SQL query to select rows (required).")
 
-    def validate_arguments(self, args):
-        if args.csv is None and args.query is None:
-            self.get_logger().error(
-                "One of options --csv or --query is required.")
-            return False
-        if args.csv is not None and args.query is not None:
-            self.get_logger().error(
-                "Options --csv and --query are mutually exclusive.")
-            return False
-        return super(CCIndexSparkJob, self).validate_arguments(args)
-
     def load_table(self, sc, spark, table_path, table_name):
         df = spark.read.load(table_path)
         df.createOrReplaceTempView(table_name)
