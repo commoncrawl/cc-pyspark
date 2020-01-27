@@ -73,6 +73,13 @@ class CCSparkJob(object):
         arg_parser.add_argument("--output_compression", default="gzip",
                                 help="Output compression codec: None,"
                                 " gzip/zlib (default), snappy, lzo, etc.")
+        arg_parser.add_argument("--output_option", action='append', default=[],
+                                help="Additional output option pair"
+                                " to set (format-specific) output options, e.g.,"
+                                " `header=true` to add a header line to CSV files."
+                                " Option name and value are split at `=` and"
+                                " multiple options can be set by passing"
+                                " `--output_option <name>=<value>` multiple times")
 
         arg_parser.add_argument("--local_temp_dir", default=None,
                                 help="Local temporary directory, used to"
@@ -101,6 +108,10 @@ class CCSparkJob(object):
             # gzip for Parquet, zlib for ORC
             args.output_compression = "zlib"
         return True
+
+    def get_output_options(self):
+        return {x[0]: x[1] for x in map(lambda x: x.split('=', 1),
+                                        self.args.output_option)}
 
     def init_logging(self, level=None):
         if level is None:
@@ -170,6 +181,7 @@ class CCSparkJob(object):
             .write \
             .format(self.args.output_format) \
             .option("compression", self.args.output_compression) \
+            .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
         self.log_aggregators(sc)
@@ -333,6 +345,7 @@ class CCIndexSparkJob(CCSparkJob):
         sqldf.write \
             .format(self.args.output_format) \
             .option("compression", self.args.output_compression) \
+            .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
         self.log_aggregators(sc)
@@ -411,6 +424,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .write \
             .format(self.args.output_format) \
             .option("compression", self.args.output_compression) \
+            .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
         self.log_aggregators(sc)
