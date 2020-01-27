@@ -28,11 +28,6 @@ class TruncatedStatsJob(CCSparkJob):
 
     content_limit = 2**20
 
-    def add_arguments(self, parser):
-        parser.add_argument("--output_option", action='append', default=[],
-                            help="Additional output option pair"
-                            "(split at `=`: <option_name>=<option_value>)")
-
     def iterate_records(self, _warc_uri, archive_iterator):
         """Iterate over all WARC records and aggregate statistics
            about (presumably) truncated WARC records"""
@@ -104,15 +99,13 @@ class TruncatedStatsJob(CCSparkJob):
 
         output = input_data.mapPartitionsWithIndex(self.process_warcs)
 
-        out = sqlc.createDataFrame(output, schema=self.output_schema) \
+        sqlc.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
             .write \
             .format(self.args.output_format) \
-            .option("compression", self.args.output_compression)
-        for output_option in self.args.output_option:
-            (opt_name, opt_val) = output_option.split('=', 1)
-            out = out.option(opt_name, opt_val)
-        out.saveAsTable(self.args.output)
+            .option("compression", self.args.output_compression) \
+            .options(**self.get_output_options()) \
+            .saveAsTable(self.args.output)
 
         self.log_aggregators(sc)
 
