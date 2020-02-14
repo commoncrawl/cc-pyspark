@@ -46,6 +46,7 @@ class ExtractLinksJob(CCSparkJob):
     robotstxt_warc_path_pattern = re.compile(r'.*/robotstxt/')
     robotstxt_sitemap_pattern = re.compile(b'^Sitemap:\\s*(\\S+)',
                                            re.IGNORECASE)
+    url_abs_pattern = re.compile(r'^(?:https?:)?//')
 
     # Meta properties usually offering links:
     #   <meta property="..." content="https://..." />
@@ -161,11 +162,8 @@ class ExtractLinksJob(CCSparkJob):
             link = None
             if url_attr in l:
                 link = l[url_attr]
-            elif opt_attr in l:
+            elif opt_attr in l and ExtractLinksJob.url_abs_pattern.match(l[opt_attr]):
                 link = l[opt_attr]
-                if not (link.startswith('http://')
-                        or link.startswith('https://')):
-                    link = None
             if link is not None:
                 # lurl = _url_join(base_url, urlparse(link)).geturl()
                 try:
@@ -203,9 +201,8 @@ class ExtractLinksJob(CCSparkJob):
                              in ExtractLinksJob.html_meta_property_links)
                             or ('name' in m and m['name']
                                 in ExtractLinksJob.html_meta_links)
-                            or ('content' in m and
-                                (m['content'].startswith('http://')
-                                 or m['content'].startswith('https://')))):
+                            or ('content' in m
+                                and ExtractLinksJob.url_abs_pattern.match(m['content']))):
                             for l in self.yield_links(url, base, [m], 'content'):
                                 yield l
                 if 'Scripts' in head:
@@ -378,11 +375,8 @@ class ExtractHostLinksJob(ExtractLinksJob):
                 continue
             if url_attr in l:
                 link = l[url_attr]
-            elif opt_attr in l:
+            elif opt_attr in l and ExtractLinksJob.url_abs_pattern.match(l[opt_attr]):
                 link = l[opt_attr]
-                if not (link.startswith('http://')
-                        or link.startswith('https://')):
-                    continue
             else:
                 continue
             if self.global_link_pattern.match(link):
