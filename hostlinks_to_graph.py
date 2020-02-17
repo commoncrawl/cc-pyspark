@@ -122,6 +122,11 @@ class HostLinksToGraph(CCSparkJob):
             .coalesce(self.args.num_output_partitions) \
             .sortWithinPartitions('s', 't')
 
+        # remove self-loops
+        # (must be done after assignment of IDs so that isolated
+        # nodes/vertices are contained in map <name, id>
+        edges = edges.filter(edges.s != edges.t)
+
         if self.args.save_as_text is not None:
             edges = edges.persist()
             edges.select(sqlf.concat_ws('\t', edges.s, edges.t)) \
