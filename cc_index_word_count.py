@@ -44,7 +44,7 @@ class CCIndexWordCountJob(CCIndexWarcSparkJob, WordCountJob):
                 script.extract()
             return soup.get_text(" ", strip=True)
         except:
-            self.html_parsing_failed.add(1)
+            self.records_parsing_failed.add(1)
             return ""
 
     def process_record(self, record):
