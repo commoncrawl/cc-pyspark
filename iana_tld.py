@@ -1,5 +1,5 @@
 # https://data.iana.org/TLD/tlds-alpha-by-domain.txt
-# (merged TLDs from tld files fetched between March 2017 and April 2018)
+# (merged TLDs from tld files fetched between March 2017 and June 2020)
 
 iana_tld_list = frozenset({
     'aaa', 'aarp', 'abarth', 'abb', 'abbott', 'abbvie', 'abc',
@@ -9,7 +9,7 @@ iana_tld_list = frozenset({
     'afamilycompany', 'afl', 'africa', 'ag', 'agakhan', 'agency',
     'ai', 'aig', 'aigo', 'airbus', 'airforce', 'airtel', 'akdn',
     'al', 'alfaromeo', 'alibaba', 'alipay', 'allfinanz',
-    'allstate', 'ally', 'alsace', 'alstom', 'am',
+    'allstate', 'ally', 'alsace', 'alstom', 'am', 'amazon',
     'americanexpress', 'americanfamily', 'amex', 'amfam', 'amica',
     'amsterdam', 'analytics', 'android', 'anquan', 'anz', 'ao',
     'aol', 'apartments', 'app', 'apple', 'aq', 'aquarelle', 'ar',
@@ -223,16 +223,17 @@ iana_tld_list = frozenset({
     'xn--90a3ac', 'xn--90ae', 'xn--90ais', 'xn--9dbq2a',
     'xn--9et52u', 'xn--9krt00a', 'xn--b4w605ferd',
     'xn--bck1b9a5dre4c', 'xn--c1avg', 'xn--c2br7g', 'xn--cck2b3b',
-    'xn--cg4bki', 'xn--clchc0ea0b2g2a9gcd', 'xn--czr694b',
-    'xn--czrs0t', 'xn--czru2d', 'xn--d1acj3b', 'xn--d1alf',
-    'xn--e1a4c', 'xn--eckvdtc9d', 'xn--efvy88h', 'xn--estv75g',
-    'xn--fct429k', 'xn--fhbei', 'xn--fiq228c5hs', 'xn--fiq64b',
-    'xn--fiqs8s', 'xn--fiqz9s', 'xn--fjq720a', 'xn--flw351e',
-    'xn--fpcrj9c3d', 'xn--fzc2c9e2c', 'xn--fzys8d69uvgm',
-    'xn--g2xx48c', 'xn--gckr3f0f', 'xn--gecrj9c', 'xn--gk3at1e',
-    'xn--h2breg3eve', 'xn--h2brj9c', 'xn--h2brj9c8c',
-    'xn--hxt814e', 'xn--i1b6b1a6a2e', 'xn--imr513n', 'xn--io0a7i',
-    'xn--j1aef', 'xn--j1amh', 'xn--j6w193g', 'xn--jlq61u9w7b',
+    'xn--cckwcxetd', 'xn--cg4bki', 'xn--clchc0ea0b2g2a9gcd',
+    'xn--czr694b', 'xn--czrs0t', 'xn--czru2d', 'xn--d1acj3b',
+    'xn--d1alf', 'xn--e1a4c', 'xn--eckvdtc9d', 'xn--efvy88h',
+    'xn--estv75g', 'xn--fct429k', 'xn--fhbei', 'xn--fiq228c5hs',
+    'xn--fiq64b', 'xn--fiqs8s', 'xn--fiqz9s', 'xn--fjq720a',
+    'xn--flw351e', 'xn--fpcrj9c3d', 'xn--fzc2c9e2c',
+    'xn--fzys8d69uvgm', 'xn--g2xx48c', 'xn--gckr3f0f',
+    'xn--gecrj9c', 'xn--gk3at1e', 'xn--h2breg3eve', 'xn--h2brj9c',
+    'xn--h2brj9c8c', 'xn--hxt814e', 'xn--i1b6b1a6a2e',
+    'xn--imr513n', 'xn--io0a7i', 'xn--j1aef', 'xn--j1amh',
+    'xn--j6w193g', 'xn--jlq480n2rg', 'xn--jlq61u9w7b',
     'xn--jvr189m', 'xn--kcrx77d1x4a', 'xn--kprw13d', 'xn--kpry57d',
     'xn--kpu716f', 'xn--kput3i', 'xn--l1acc', 'xn--lgbbat1ad8j',
     'xn--mgb9awbf', 'xn--mgba3a3ejt', 'xn--mgba3a4f16a',
