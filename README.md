@@ -5,13 +5,22 @@
 This project provides examples how to process the Common Crawl dataset with [Apache Spark](https://spark.apache.org/) and Python:
 
 + [count HTML tags](./html_tag_count.py) in Common Crawl's raw response data (WARC files)
+
 + [count web server names](./server_count.py) in Common Crawl's metadata (WAT files or WARC files)
+
 + list host names and corresponding [IP addresses](./server_ip_address.py) (WAT files or WARC files)
+
 + [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
+
 + [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](/commoncrawl/cc-webgraph)
-+ work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (cf. [cc-index-table](/commoncrawl/cc-index-table)):
+
++ work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](/commoncrawl/cc-index-table) and notes about [schema merging](#columnar-index-and-schema-merging)):
+
   - run a SQL query and [export the result as a table](./cc_index_export.py)
-  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py)
+
+  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py). Alternatively, the first step (query the columnar index) can be executed using Amazon Athena. The resulting CSV listing the records is then passed via `--csv` to the Spark job.
+
+Further information about the examples and available options is shown via the [command-line option](#command-line-options) `--help`.
 
 
 ## Setup
@@ -22,7 +31,7 @@ To develop and test locally, you will need to install
 ```
 pip install -r requirements.txt
 ```
-* to query he columnar index you also need to [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3
+* (optionally, and only if you want to query the columnar index) [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3
 
 
 ## Compatibility and Requirements
@@ -87,7 +96,7 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 1. spinning up the Spark cluster: [AWS EMR](https://aws.amazon.com/documentation/emr/) contains a ready-to-use Spark installation but you'll find multiple descriptions on the web how to deploy Spark on a cheap cluster of AWS spot instances. See also [launching Spark on a cluster](https://spark.apache.org/docs/latest/#launching-on-a-cluster).
 
-2. choose appropriate cluster-specific settings when [submitting jobs](https://spark.apache.org/docs/latest/submitting-applications.html) and also check for relevant command-line options (e.g., `--num_input_partitions` or `--num_output_partitions`, see below)
+2. choose appropriate cluster-specific settings when [submitting jobs](https://spark.apache.org/docs/latest/submitting-applications.html) and also check for relevant [command-line options](#command-line-options) (e.g., `--num_input_partitions` or `--num_output_partitions`, see below)
 
 3. don't forget to deploy all dependencies in the cluster, see [advanced dependency management](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management)
 
@@ -118,12 +127,34 @@ $SPARK_HOME/bin/spark-submit \
 
 ### Installation of S3 Support Libraries
 
-While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages com.amazonaws:aws-java-sdk-pom:1.10.34,org.apache.hadoop:hadoop-aws:2.7.2` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management).
+While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages org.apache.hadoop:hadoop-aws:3.2.0` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management) - the hadoop-aws package and transitive dependencies are downloaded as Maven dependencies. Note that the required version of hadoop-aws package depends on the Hadoop version bundled with your Spark installation, e.g., Spark 3.0.0 bundled with Hadoop 3.2.0 ([spark-3.0.0-bin-hadoop3.2.tgz](https://archive.apache.org/dist/spark/spark-3.0.0/spark-3.0.0-bin-hadoop3.2.tgz)).
 
 Please also note that:
 - the schema of the URL referencing the columnar index depends on the actual S3 file system implementation: it's `s3://` on EMR but `s3a://` when using [s3a](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Introducing_the_Hadoop_S3A_client.).
 - data can be accessed anonymously using [s3a.AnonymousAWSCredentialsProvider](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Anonymous_Login_with_AnonymousAWSCredentialsProvider). This requires Hadoop 2.9 or newer.
 - without anonymous access valid AWS credentials need to be provided, e.g., by setting `spark.hadoop.fs.s3a.access.key` and `spark.hadoop.fs.s3a.secret.key` in the Spark configuration.
+
+Example call to count words in 10 WARC records host under the `.is` top-level domain:
+```
+$SPARK_HOME/bin/spark-submit \
+    --packages org.apache.hadoop:hadoop-aws:3.2.0 \
+    --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider \
+    ./cc_index_word_count.py \
+    --query "SELECT url, warc_filename, warc_record_offset, warc_record_length FROM ccindex WHERE crawl = 'CC-MAIN-2020-24' AND subset = 'warc' AND url_host_tld = 'is' LIMIT 10" \
+    s3a://commoncrawl/cc-index/table/cc-main/warc/ \
+    myccindexwordcountoutput \
+    --num_output_partitions 1 \
+    --output_format json
+```
+
+### Columnar index and schema merging
+
+The schema of the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) has been extended over time by adding new columns. If you want to query one of the new columns (e.g., `content_languages`), the following [Spark configuration option](#overwriting-spark-configuration-properties) needs to be set:
+```
+--conf spark.sql.parquet.mergeSchema=true
+```
+
+However, this option impacts the query performance, so use with care! Please also read [cc-index-table](/commoncrawl/cc-index-table) about configuration options to improve the performance of Spark SQL queries.
 
 
 ## Credits
