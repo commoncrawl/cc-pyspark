@@ -156,6 +156,10 @@ The schema of the [columnar URL index](https://commoncrawl.org/2018/03/index-to-
 
 However, this option impacts the query performance, so use with care! Please also read [cc-index-table](/commoncrawl/cc-index-table) about configuration options to improve the performance of Spark SQL queries.
 
+Alternatively, it's possible configure the table schema explicitly:
+- download the [latest table schema as JSON](/commoncrawl/cc-index-table/blob/master/src/main/resources/schema/cc-index-schema-flat.json)
+- and use it by adding the command-line argument `--table_schema cc-index-schema-flat.json`.
+
 
 ## Credits
 
