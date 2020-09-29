@@ -92,7 +92,7 @@ See also
 
 ### Running in Spark cluster over large amounts of data
 
-As the Common Crawl dataset lives in the Amazon Public Datasets program, you can access and process it on Amazon AWS without incurring any transfer costs. The only cost that you incur is the cost of the machines running your Spark cluster.
+As the Common Crawl dataset lives in the Amazon Public Datasets program, you can access and process it on Amazon AWS (in the us-east-1 [AWS region](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html#concepts-regions)) without incurring any transfer costs. The only cost that you incur is the cost of the machines running your Spark cluster.
 
 1. spinning up the Spark cluster: [AWS EMR](https://aws.amazon.com/documentation/emr/) contains a ready-to-use Spark installation but you'll find multiple descriptions on the web how to deploy Spark on a cheap cluster of AWS spot instances. See also [launching Spark on a cluster](https://spark.apache.org/docs/latest/#launching-on-a-cluster).
 
@@ -121,7 +121,7 @@ $SPARK_HOME/bin/spark-submit \
     --conf spark.sql.warehouse.dir=myWareHouseDir \
     ... (other Spark options, flags, config properties) \
     ./server_count.py \
-	... (program-specific options)
+    ... (program-specific options)
 ```
 
 
