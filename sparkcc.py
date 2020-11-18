@@ -236,7 +236,7 @@ class CCSparkJob(object):
             no_parse = (not self.warc_parse_http_header)
             try:
                 archive_iterator = ArchiveIterator(stream,
-                                                   no_record_parse=no_parse)
+                                                   no_record_parse=no_parse, arc2warc=True)
                 for res in self.iterate_records(uri, archive_iterator):
                     yield res
             except ArchiveLoadFailed as exception:
