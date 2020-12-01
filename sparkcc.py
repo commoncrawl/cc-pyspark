@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import re
@@ -305,9 +306,19 @@ class CCIndexSparkJob(CCSparkJob):
                             " (default: ccindex)")
         parser.add_argument("--query", default=None, required=True,
                             help="SQL query to select rows (required).")
+        parser.add_argument("--table_schema", default=None,
+                            help="JSON schema of the ccindex table,"
+                            " implied from Parquet files if not provided.")
 
     def load_table(self, sc, spark, table_path, table_name):
-        df = spark.read.load(table_path)
+        parquet_reader = spark.read.format('parquet')
+        if self.args.table_schema is not None:
+            self.get_logger(sc).info(
+                "Reading table schema from {}".format(self.args.table_schema))
+            with open(self.args.table_schema, 'r') as s:
+                schema = StructType.fromJson(json.loads(s.read()))
+            parquet_reader = parquet_reader.schema(schema)
+        df = parquet_reader.load(table_path)
         df.createOrReplaceTempView(table_name)
         self.get_logger(sc).info(
             "Schema of table {}:\n{}".format(table_name, df.schema))
