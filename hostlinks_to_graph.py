@@ -52,7 +52,7 @@ class HostLinksToGraph(CCSparkJob):
             return False
         return True
 
-    def vertices_assign_ids(self, sc, sqlc, edges):
+    def vertices_assign_ids(self, session, edges):
         source = edges.select(edges.s.alias('name'))
         target = edges.select(edges.t.alias('name'))
 
@@ -79,7 +79,7 @@ class HostLinksToGraph(CCSparkJob):
                 StructField("name", StringType(), True),
                 StructField("id", LongType(), True)
             ])
-            ids = sqlc.createDataFrame(id_rdd, schema=id_schema)
+            ids = session.createDataFrame(id_rdd, schema=id_schema)
 
         if self.args.save_as_text is not None:
             ids = ids.persist()
@@ -94,15 +94,15 @@ class HostLinksToGraph(CCSparkJob):
 
         return ids
 
-    def run_job(self, sc, sqlc):
+    def run_job(self, session):
 
         # read edges  s -> t  (host names)
-        edges = sqlc.read.load(self.args.input)
+        edges = session.read.load(self.args.input)
 
         if self.args.add_input:
             # merge multiple input graphs
             for add_input in self.args.add_input:
-                add_edges = sqlc.read.load(add_input)
+                add_edges = session.read.load(add_input)
                 edges = edges.union(add_edges)
             # remove duplicates and sort
             edges = edges \
@@ -110,9 +110,9 @@ class HostLinksToGraph(CCSparkJob):
                 .sortWithinPartitions('s', 't')
 
         if self.args.vertex_ids is not None:
-            ids = sqlc.read.load(self.args.vertex_ids)
+            ids = session.read.load(self.args.vertex_ids)
         else:
-            ids = self.vertices_assign_ids(sc, sqlc, edges)
+            ids = self.vertices_assign_ids(session, edges)
 
         edges = edges.join(ids, edges.s == ids.name, 'inner')
         edges = edges.select(edges.id.alias('s'), 't')

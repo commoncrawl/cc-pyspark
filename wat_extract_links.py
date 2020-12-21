@@ -274,29 +274,29 @@ class ExtractLinksJob(CCSparkJob):
         self.log_accumulator(sc, self.link_count,
                              'non-unique link pairs = {}')
 
-    def run_job(self, sc, sqlc):
+    def run_job(self, session):
         output = None
         if self.args.input != '':
-            input_data = sc.textFile(
+            input_data = session.sparkContext.textFile(
                 self.args.input,
                 minPartitions=self.args.num_input_partitions)
             output = input_data.mapPartitionsWithIndex(self.process_warcs)
 
         if self.args.intermediate_output is None:
-            df = sqlc.createDataFrame(output, schema=self.output_schema)
+            df = session.createDataFrame(output, schema=self.output_schema)
         else:
             if output is not None:
-                sqlc.createDataFrame(output, schema=self.output_schema) \
+                session.createDataFrame(output, schema=self.output_schema) \
                     .write \
                     .format(self.args.output_format) \
                     .option("compression", self.args.output_compression) \
                     .saveAsTable(self.args.intermediate_output)
-                self.log_accumulators(sc)
-            warehouse_dir = sc.getConf().get('spark.sql.warehouse.dir',
+                self.log_accumulators(session.sparkContext)
+            warehouse_dir = session.conf.get('spark.sql.warehouse.dir',
                                              'spark-warehouse')
             intermediate_output = os.path.join(warehouse_dir,
                                                self.args.intermediate_output)
-            df = sqlc.read.parquet(intermediate_output)
+            df = session.read.parquet(intermediate_output)
 
         df.dropDuplicates() \
           .coalesce(self.args.num_output_partitions) \
@@ -306,7 +306,7 @@ class ExtractLinksJob(CCSparkJob):
           .option("compression", self.args.output_compression) \
           .saveAsTable(self.args.output)
 
-        self.log_accumulators(sc)
+        self.log_accumulators(session.sparkContext)
 
 
 class ExtractHostLinksJob(ExtractLinksJob):
