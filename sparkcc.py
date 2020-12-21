@@ -97,7 +97,6 @@ class CCSparkJob(object):
         args = arg_parser.parse_args()
         if not self.validate_arguments(args):
             raise Exception("Arguments not valid")
-        self.init_logging(args.log_level)
 
         return args
 
@@ -114,12 +113,15 @@ class CCSparkJob(object):
         return {x[0]: x[1] for x in map(lambda x: x.split('=', 1),
                                         self.args.output_option)}
 
-    def init_logging(self, level=None):
+    def init_logging(self, level=None, session=None):
         if level is None:
             level = self.log_level
         else:
             self.log_level = level
         logging.basicConfig(level=level, format=LOGGING_FORMAT)
+        if session:
+            session.sparkContext.setLogLevel(level)
+
 
     def init_accumulators(self, sc):
         self.records_processed = sc.accumulator(0)
@@ -128,32 +130,30 @@ class CCSparkJob(object):
 
     def get_logger(self, spark_context=None):
         """Get logger from SparkContext or (if None) from logging module"""
-        if spark_context is None:
-            return logging.getLogger(self.name)
-        return spark_context._jvm.org.apache.log4j.LogManager \
-            .getLogger(self.name)
+        if spark_context:
+            return spark_context._jvm.org.apache.log4j.LogManager \
+                        .getLogger(self.name)
+        return logging.getLogger(self.name)
 
     def run(self):
         self.args = self.parse_arguments()
 
-        conf = SparkConf()
+        builder = SparkSession.builder.appName(self.name)
 
         if self.args.spark_profiler:
-            conf = conf.set("spark.python.profile", "true")
+            builder.config("spark.python.profile", "true")
 
-        sc = SparkContext(
-            appName=self.name,
-            conf=conf)
-        sqlc = SQLContext(sparkContext=sc)
+        session = builder.getOrCreate()
 
-        self.init_accumulators(sc)
+        self.init_logging(self.args.log_level, session)
+        self.init_accumulators(session.sparkContext)
 
-        self.run_job(sc, sqlc)
+        self.run_job(session)
 
         if self.args.spark_profiler:
-            sc.show_profiles()
+            session.sparkContext.show_profiles()
 
-        sc.stop()
+        session.stop()
 
     def log_aggregator(self, sc, agg, descr):
         self.get_logger(sc).info(descr.format(agg.value))
@@ -170,14 +170,14 @@ class CCSparkJob(object):
     def reduce_by_key_func(a, b):
         return a + b
 
-    def run_job(self, sc, sqlc):
-        input_data = sc.textFile(self.args.input,
-                                 minPartitions=self.args.num_input_partitions)
+    def run_job(self, session):
+        input_data = session.sparkContext.textFile(self.args.input,
+                                                   minPartitions=self.args.num_input_partitions)
 
         output = input_data.mapPartitionsWithIndex(self.process_warcs) \
             .reduceByKey(self.reduce_by_key_func)
 
-        sqlc.createDataFrame(output, schema=self.output_schema) \
+        session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
             .write \
             .format(self.args.output_format) \
@@ -185,7 +185,7 @@ class CCSparkJob(object):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_aggregators(session.sparkContext)
 
     def process_warcs(self, id_, iterator):
         s3pattern = re.compile('^s3://([^/]+)/(.+)')
@@ -310,48 +310,47 @@ class CCIndexSparkJob(CCSparkJob):
                             help="JSON schema of the ccindex table,"
                             " implied from Parquet files if not provided.")
 
-    def load_table(self, sc, spark, table_path, table_name):
-        parquet_reader = spark.read.format('parquet')
+    def load_table(self, session, table_path, table_name):
+        parquet_reader = session.read.format('parquet')
         if self.args.table_schema is not None:
-            self.get_logger(sc).info(
+            self.get_logger(session.sparkContext).info(
                 "Reading table schema from {}".format(self.args.table_schema))
             with open(self.args.table_schema, 'r') as s:
                 schema = StructType.fromJson(json.loads(s.read()))
             parquet_reader = parquet_reader.schema(schema)
         df = parquet_reader.load(table_path)
         df.createOrReplaceTempView(table_name)
-        self.get_logger(sc).info(
+        self.get_logger(session.sparkContext).info(
             "Schema of table {}:\n{}".format(table_name, df.schema))
 
-    def execute_query(self, sc, spark, query):
-        sqldf = spark.sql(query)
-        self.get_logger(sc).info("Executing query: {}".format(query))
+    def execute_query(self, session, query):
+        sqldf = session.sql(query)
+        self.get_logger(session.sparkContext).info("Executing query: {}".format(query))
         sqldf.explain()
         return sqldf
 
-    def load_dataframe(self, sc, partitions=-1):
-        session = SparkSession.builder.config(conf=sc.getConf()).getOrCreate()
+    def load_dataframe(self, session, partitions=-1):
         if self.args.query is not None:
-            self.load_table(sc, session, self.args.input, self.args.table)
-            sqldf = self.execute_query(sc, session, self.args.query)
+            self.load_table(session, self.args.input, self.args.table)
+            sqldf = self.execute_query(session, self.args.query)
         else:
             sqldf = session.read.format("csv").option("header", True) \
                 .option("inferSchema", True).load(self.args.csv)
         sqldf.persist()
 
         num_rows = sqldf.count()
-        self.get_logger(sc).info(
+        self.get_logger(session.sparkContext).info(
             "Number of records/rows matched by query: {}".format(num_rows))
 
         if partitions > 0:
-            self.get_logger(sc).info(
+            self.get_logger(session.sparkContext).info(
                 "Repartitioning data to {} partitions".format(partitions))
             sqldf = sqldf.repartition(partitions)
 
         return sqldf
 
-    def run_job(self, sc, sqlc):
-        sqldf = self.load_dataframe(sc, self.args.num_output_partitions)
+    def run_job(self, session):
+        sqldf = self.load_dataframe(session, self.args.num_output_partitions)
 
         sqldf.write \
             .format(self.args.output_format) \
@@ -359,7 +358,7 @@ class CCIndexSparkJob(CCSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_aggregators(session.sparkContext)
 
 
 class CCIndexWarcSparkJob(CCIndexSparkJob):
@@ -421,8 +420,8 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
                     'Invalid WARC record: {} ({}, offset: {}, length: {}) - {}'
                     .format(url, warc_path, offset, length, exception))
 
-    def run_job(self, sc, sqlc):
-        sqldf = self.load_dataframe(sc, self.args.num_input_partitions)
+    def run_job(self, session):
+        sqldf = self.load_dataframe(session, self.args.num_input_partitions)
 
         warc_recs = sqldf.select("url", "warc_filename", "warc_record_offset",
                                  "warc_record_length").rdd
@@ -430,7 +429,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
         output = warc_recs.mapPartitions(self.fetch_process_warc_records) \
             .reduceByKey(self.reduce_by_key_func)
 
-        sqlc.createDataFrame(output, schema=self.output_schema) \
+        session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
             .write \
             .format(self.args.output_format) \
@@ -438,4 +437,4 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_aggregators(session.sparkContext)
