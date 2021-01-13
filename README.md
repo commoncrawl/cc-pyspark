@@ -12,9 +12,9 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
 + [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
 
-+ [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](/commoncrawl/cc-webgraph)
++ [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
 
-+ work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](/commoncrawl/cc-index-table) and notes about [schema merging](#columnar-index-and-schema-merging)):
++ work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](https://github.com/commoncrawl/cc-index-table) and notes about [schema merging](#columnar-index-and-schema-merging)):
 
   - run a SQL query and [export the result as a table](./cc_index_export.py)
 
@@ -154,22 +154,22 @@ The schema of the [columnar URL index](https://commoncrawl.org/2018/03/index-to-
 --conf spark.sql.parquet.mergeSchema=true
 ```
 
-However, this option impacts the query performance, so use with care! Please also read [cc-index-table](/commoncrawl/cc-index-table) about configuration options to improve the performance of Spark SQL queries.
+However, this option impacts the query performance, so use with care! Please also read [cc-index-table](https://github.com/commoncrawl/cc-index-table) about configuration options to improve the performance of Spark SQL queries.
 
 Alternatively, it's possible configure the table schema explicitly:
-- download the [latest table schema as JSON](/commoncrawl/cc-index-table/blob/master/src/main/resources/schema/cc-index-schema-flat.json)
+- download the [latest table schema as JSON](https://github.com/commoncrawl/cc-index-table/blob/master/src/main/resources/schema/cc-index-schema-flat.json)
 - and use it by adding the command-line argument `--table_schema cc-index-schema-flat.json`.
 
 
 ## Credits
 
-Examples are originally ported from Stephen Merity's [cc-mrjob](/commoncrawl/cc-mrjob/) with the following changes and upgrades:
+Examples are originally ported from Stephen Merity's [cc-mrjob](https://github.com/commoncrawl/cc-mrjob/) with the following changes and upgrades:
 * based on Apache Spark (instead of [mrjob](https://mrjob.readthedocs.io/))
 * [boto3](https://boto3.readthedocs.io/) supporting multi-part download of data from S3
 * [warcio](https://github.com/webrecorder/warcio) a Python 2 and Python 3 compatible module to access WARC files
 
 Further inspirations are taken from
-* [cosr-back](//github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://about.commonsearch.org/). You definitely should have a look at it if you need a more sophisticated WARC processor (including a HTML parser for example).
+* [cosr-back](https://github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://about.commonsearch.org/). You definitely should have a look at it if you need a more sophisticated WARC processor (including a HTML parser for example).
 * Mark Litwintschik's blog post [Analysing Petabytes of Websites](https://tech.marksblogg.com/petabytes-of-website-data-spark-emr.html)
 
 
