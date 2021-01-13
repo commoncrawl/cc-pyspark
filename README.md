@@ -169,7 +169,7 @@ Examples are originally ported from Stephen Merity's [cc-mrjob](https://github.c
 * [warcio](https://github.com/webrecorder/warcio) a Python 2 and Python 3 compatible module to access WARC files
 
 Further inspirations are taken from
-* [cosr-back](https://github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://about.commonsearch.org/). You definitely should have a look at it if you need a more sophisticated WARC processor (including a HTML parser for example).
+* [cosr-back](https://github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://web.archive.org/web/20171117073653/https://about.commonsearch.org/). You definitely should have a look at it if you need a more sophisticated WARC processor (including a HTML parser for example).
 * Mark Litwintschik's blog post [Analysing Petabytes of Websites](https://tech.marksblogg.com/petabytes-of-website-data-spark-emr.html)
 
 
