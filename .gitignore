@@ -5,4 +5,15 @@ __pycache__
 # Eclipse project files
 .project
 .pydevproject
+.settings/
 
+# Intellij IDEA PyCharm
+.idea/
+.idea_modules/
+
+# default output folder when running/testing locally
+spark-warehouse/
+
+# get-data.sh puts data into
+crawl-data/
+input/
