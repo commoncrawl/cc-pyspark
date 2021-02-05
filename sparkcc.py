@@ -217,11 +217,10 @@ class CCSparkJob(object):
                     continue
                 warctemp.seek(0)
                 stream = warctemp
-            elif uri.startswith('hdfs://'):
+            elif uri.startswith('hdfs:/'):
                 try:
                     import pydoop.hdfs as hdfs
                     self.get_logger().error("Reading from HDFS {}".format(uri))
-                    uri = uri[6:]
                     stream = hdfs.open(uri)
                 except RuntimeError as exception:
                     self.get_logger().error(
