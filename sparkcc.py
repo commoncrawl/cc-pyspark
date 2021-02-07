@@ -286,9 +286,11 @@ class CCSparkJob(object):
             (record.rec_headers['WARC-Identified-Payload-Type'] in
              html_types)):
             return True
-        for html_type in html_types:
-            if html_type in record.content_type:
-                return True
+        content_type = record.http_headers.get_header('content-type', None)
+        if content_type:
+            for html_type in html_types:
+                if html_type in content_type:
+                    return True
         return False
 
 
