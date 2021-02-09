@@ -9,3 +9,6 @@ idna
 # for parsing HTML (used in cc_index_word_count.py)
 beautifulsoup4
 lxml
+
+# for HDFS support (requires environments variables JAVA_HOME and HADOOP_HOME):
+#pydoop
