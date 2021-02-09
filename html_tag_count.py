@@ -15,10 +15,9 @@ class TagCountJob(CCSparkJob):
 
     def process_record(self, record):
         if record.rec_type != 'response':
-            # WARC request or metadata records
+            # skip over WARC request or metadata records
             return
-        content_type = record.http_headers.get_header('content-type', None)
-        if content_type is None or 'html' not in content_type:
+        if not self.is_html(record):
             # skip non-HTML or unknown content types
             return
         data = record.content_stream().read()

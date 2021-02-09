@@ -37,21 +37,29 @@ class CCIndexWordCountJob(CCIndexWarcSparkJob, WordCountJob):
 
     def html_to_text(self, page, record):
         try:
-            encoding = EncodingDetector.find_declared_encoding(page,
-                                                               is_html=True)
-            soup = BeautifulSoup(page, "lxml", from_encoding=encoding)
-            for script in soup(["script", "style"]):
+            encoding = record.rec_headers['WARC-Identified-Content-Charset']
+            if not encoding:
+                for encoding in EncodingDetector(page, is_html=True).encodings:
+                    # take the first detected encoding
+                    break
+            soup = BeautifulSoup(page, 'lxml', from_encoding=encoding)
+            for script in soup(['script', 'style']):
                 script.extract()
-            return soup.get_text(" ", strip=True)
-        except:
+            return soup.get_text(' ', strip=True)
+        except Exception as e:
+            self.get_logger().error("Error converting HTML to text for {}: {}",
+                                    record.rec_headers['WARC-Target-URI'], e)
             self.records_parsing_failed.add(1)
-            return ""
+            return ''
 
     def process_record(self, record):
-        page = record.content_stream().read()
+        if record.rec_type != 'response':
+            # skip over WARC request or metadata records
+            return
         if not self.is_html(record):
             self.records_non_html.add(1)
             return
+        page = record.content_stream().read()
         text = self.html_to_text(page, record)
         words = map(lambda w: w.lower(),
                     WordCountJob.word_pattern.findall(text))
