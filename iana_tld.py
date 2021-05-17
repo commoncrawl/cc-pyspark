@@ -1,5 +1,5 @@
 # https://data.iana.org/TLD/tlds-alpha-by-domain.txt
-# (merged TLDs from tld files fetched between March 2017 and June 2020)
+# (merged TLDs from tld files fetched between March 2017 and May 2021)
 
 iana_tld_list = frozenset({
     'aaa', 'aarp', 'abarth', 'abb', 'abbott', 'abbvie', 'abc',
@@ -216,9 +216,9 @@ iana_tld_list = frozenset({
     'xn--2scrj9c', 'xn--30rr7y', 'xn--3bst00m', 'xn--3ds443g',
     'xn--3e0b707e', 'xn--3hcrj9c', 'xn--3oq18vl8pn36a',
     'xn--3pxu8k', 'xn--42c2d9a', 'xn--45br5cyl', 'xn--45brj9c',
-    'xn--45q11c', 'xn--4gbrim', 'xn--54b7fta0cc', 'xn--55qw42g',
-    'xn--55qx5d', 'xn--5su34j936bgsg', 'xn--5tzm5g', 'xn--6frz82g',
-    'xn--6qq986b3xl', 'xn--80adxhks', 'xn--80ao21a',
+    'xn--45q11c', 'xn--4dbrk0ce', 'xn--4gbrim', 'xn--54b7fta0cc',
+    'xn--55qw42g', 'xn--55qx5d', 'xn--5su34j936bgsg', 'xn--5tzm5g',
+    'xn--6frz82g', 'xn--6qq986b3xl', 'xn--80adxhks', 'xn--80ao21a',
     'xn--80aqecdr1a', 'xn--80asehdb', 'xn--80aswg', 'xn--8y0a063a',
     'xn--90a3ac', 'xn--90ae', 'xn--90ais', 'xn--9dbq2a',
     'xn--9et52u', 'xn--9krt00a', 'xn--b4w605ferd',

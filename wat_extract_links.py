@@ -37,6 +37,7 @@ class ExtractLinksJob(CCSparkJob):
     records_failed = None
     records_non_html = None
     records_response_redirect = None
+    link_count = None
 
     http_redirect_pattern = re.compile(b'^HTTP\\s*/\\s*1\\.[01]\\s*30[12378]\\b')
     http_redirect_location_pattern = re.compile(b'^Location:\\s*(\\S+)',
@@ -80,21 +81,23 @@ class ExtractLinksJob(CCSparkJob):
             self.records_processed.add(1)
 
     def process_record(self, record):
+        link_count = 0
         if self.is_wat_json_record(record):
             try:
-                record = json.loads(record.content_stream().read())
+                wat_record = json.loads(record.content_stream().read())
             except ValueError as e:
                 self.get_logger().error('Failed to load JSON: {}'.format(e))
                 self.records_failed.add(1)
                 return
-            warc_header = record['Envelope']['WARC-Header-Metadata']
+            warc_header = wat_record['Envelope']['WARC-Header-Metadata']
             if warc_header['WARC-Type'] != 'response':
                 # WAT request or metadata records
                 return
             self.records_response.add(1)
             self.records_response_wat.add(1)
             url = warc_header['WARC-Target-URI']
-            for link in self.get_links(url, record):
+            for link in self.get_links(url, wat_record):
+                link_count += 1
                 yield link
         elif record.rec_type == 'response':
             self.records_response.add(1)
@@ -106,12 +109,24 @@ class ExtractLinksJob(CCSparkJob):
                 self.records_response_robotstxt.add(1)
                 for link in self.process_robotstxt(record, stream,
                                                    http_status_line):
+                    link_count += 1
                     yield link
             elif ExtractLinksJob.http_redirect_pattern.match(http_status_line):
                 self.records_response_redirect.add(1)
                 for link in self.process_redirect(record, stream,
                                                   http_status_line):
+                    link_count += 1
                     yield link
+        else:
+            return
+        if link_count == 0:
+            # ensure that the URL itself is a node in the graph
+            # (every visited URL should be a node)
+            uri = record.rec_headers.get_header('WARC-Target-URI')
+            for link in self.yield_link(uri, uri):
+                link_count += 1
+                yield link
+        self.link_count.add(link_count)
 
     def process_redirect(self, record, stream, http_status_line):
         """Process redirects (HTTP status code 30[12378])
@@ -129,8 +144,7 @@ class ExtractLinksJob(CCSparkJob):
                             redir_to, e))
                     return
                 redir_from = record.rec_headers.get_header('WARC-Target-URI')
-                for link in self.yield_redirect(redir_from, redir_to,
-                                                http_status_line):
+                for link in self.yield_link(redir_from, redir_to):
                     yield link
                 return
             elif line == b'\r\n':
@@ -178,6 +192,9 @@ class ExtractLinksJob(CCSparkJob):
             # ensure that every page is a node in the graph
             # even if it has not outgoing links
             yield from_url, from_url
+
+    def yield_link(self, src, target):
+        yield src, target
 
     def get_links(self, url, record):
         try:
@@ -235,6 +252,7 @@ class ExtractLinksJob(CCSparkJob):
         self.records_response_warc = sc.accumulator(0)
         self.records_response_redirect = sc.accumulator(0)
         self.records_response_robotstxt = sc.accumulator(0)
+        self.link_count = sc.accumulator(0)
 
     def log_aggregators(self, sc):
         super(ExtractLinksJob, self).log_aggregators(sc)
@@ -253,6 +271,8 @@ class ExtractLinksJob(CCSparkJob):
                             'response records redirects = {}')
         self.log_aggregator(sc, self.records_response_robotstxt,
                             'response records robots.txt = {}')
+        self.log_aggregator(sc, self.link_count,
+                            'non-unique link pairs = {}')
 
     def run_job(self, sc, sqlc):
         output = None
@@ -332,8 +352,8 @@ class ExtractHostLinksJob(ExtractLinksJob):
         else:
             try:
                 host = urlparse(url).hostname
-            except:
-                # self.get_logger().debug("Failed to parse URL {}: {}".format(url, e))
+            except Exception as e:
+                # self.get_logger().debug("Failed to parse URL {}: {}\n".format(url, e))
                 return None
             if host is None:
                 return None
@@ -407,10 +427,6 @@ class ExtractHostLinksJob(ExtractLinksJob):
                     pass
             else:
                 inner_host_links += 1
-        if len(target_hosts) == 0:
-            # ensure that the host itself is a node in the graph
-            # (every visited host should be a node)
-            yield from_host, from_host
         for t in target_hosts:
             yield from_host, t
         if inner_host_links > 0 and base_url is not None:
@@ -420,12 +436,10 @@ class ExtractHostLinksJob(ExtractLinksJob):
                 # any internal link becomes an external link
                 yield from_host, base_host
 
-    def yield_redirect(self, src, target, http_status_line):
-        if src == target:
-            return
+    def yield_link(self, src, target):
         src_host = ExtractHostLinksJob.get_surt_host(src)
         thost = ExtractHostLinksJob.get_surt_host(target)
-        if thost is None or src_host is None or src_host == thost:
+        if thost is None or src_host is None:
             return
         yield src_host, thost
 
