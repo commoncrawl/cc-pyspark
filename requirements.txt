@@ -13,3 +13,8 @@ lxml
 
 # for HDFS support (requires environments variables JAVA_HOME and HADOOP_HOME):
 #pydoop
+
+# to parse WARC/WAT/WET files using FastWARC (https://pypi.org/project/FastWARC/)
+#fastwarc
+# (tested with)
+#fastwarc==0.12.2
