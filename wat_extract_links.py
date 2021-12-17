@@ -254,25 +254,25 @@ class ExtractLinksJob(CCSparkJob):
         self.records_response_robotstxt = sc.accumulator(0)
         self.link_count = sc.accumulator(0)
 
-    def log_aggregators(self, sc):
-        super(ExtractLinksJob, self).log_aggregators(sc)
+    def log_accumulators(self, sc):
+        super(ExtractLinksJob, self).log_accumulators(sc)
 
-        self.log_aggregator(sc, self.records_response,
-                            'response records = {}')
-        self.log_aggregator(sc, self.records_failed,
-                            'records failed to process = {}')
-        self.log_aggregator(sc, self.records_non_html,
-                            'records not HTML = {}')
-        self.log_aggregator(sc, self.records_response_wat,
-                            'response records WAT = {}')
-        self.log_aggregator(sc, self.records_response_warc,
-                            'response records WARC = {}')
-        self.log_aggregator(sc, self.records_response_redirect,
-                            'response records redirects = {}')
-        self.log_aggregator(sc, self.records_response_robotstxt,
-                            'response records robots.txt = {}')
-        self.log_aggregator(sc, self.link_count,
-                            'non-unique link pairs = {}')
+        self.log_accumulator(sc, self.records_response,
+                             'response records = {}')
+        self.log_accumulator(sc, self.records_failed,
+                             'records failed to process = {}')
+        self.log_accumulator(sc, self.records_non_html,
+                             'records not HTML = {}')
+        self.log_accumulator(sc, self.records_response_wat,
+                             'response records WAT = {}')
+        self.log_accumulator(sc, self.records_response_warc,
+                             'response records WARC = {}')
+        self.log_accumulator(sc, self.records_response_redirect,
+                             'response records redirects = {}')
+        self.log_accumulator(sc, self.records_response_robotstxt,
+                             'response records robots.txt = {}')
+        self.log_accumulator(sc, self.link_count,
+                             'non-unique link pairs = {}')
 
     def run_job(self, sc, sqlc):
         output = None
@@ -291,7 +291,7 @@ class ExtractLinksJob(CCSparkJob):
                     .format(self.args.output_format) \
                     .option("compression", self.args.output_compression) \
                     .saveAsTable(self.args.intermediate_output)
-                self.log_aggregators(sc)
+                self.log_accumulators(sc)
             warehouse_dir = sc.getConf().get('spark.sql.warehouse.dir',
                                              'spark-warehouse')
             intermediate_output = os.path.join(warehouse_dir,
@@ -306,7 +306,7 @@ class ExtractLinksJob(CCSparkJob):
           .option("compression", self.args.output_compression) \
           .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_accumulators(sc)
 
 
 class ExtractHostLinksJob(ExtractLinksJob):

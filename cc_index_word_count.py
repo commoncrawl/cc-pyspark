@@ -7,7 +7,7 @@ from sparkcc import CCIndexWarcSparkJob
 from word_count import WordCountJob
 
 
-class CCIndexWordCountJob(CCIndexWarcSparkJob, WordCountJob):
+class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
     """ Word count (frequency list) from WARC records matching a SQL query
         on the columnar URL index """
 
@@ -22,13 +22,13 @@ class CCIndexWordCountJob(CCIndexWarcSparkJob, WordCountJob):
         self.records_parsing_failed = sc.accumulator(0)
         self.records_non_html = sc.accumulator(0)
 
-    def log_aggregators(self, sc):
-        super(CCIndexWordCountJob, self).log_aggregators(sc)
+    def log_accumulators(self, sc):
+        super(CCIndexWordCountJob, self).log_accumulators(sc)
 
-        self.log_aggregator(sc, self.records_parsing_failed,
-                            'records failed to parse = {}')
-        self.log_aggregator(sc, self.records_non_html,
-                            'records not HTML = {}')
+        self.log_accumulator(sc, self.records_parsing_failed,
+                             'records failed to parse = {}')
+        self.log_accumulator(sc, self.records_non_html,
+                             'records not HTML = {}')
 
     @staticmethod
     def reduce_by_key_func(a, b):

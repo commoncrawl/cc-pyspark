@@ -49,7 +49,7 @@ class CCSparkJob(object):
     num_output_partitions = 10
 
     def parse_arguments(self):
-        """ Returns the parsed arguments from the command line """
+        """Returns the parsed arguments from the command line"""
 
         description = self.name
         if self.__doc__ is not None:
@@ -103,9 +103,15 @@ class CCSparkJob(object):
         return args
 
     def add_arguments(self, parser):
+        """Allows derived classes to add command-line arguments.
+           Derived classes overriding this method must call
+           super().add_arguments(parser) in order to add "register"
+           arguments from all classes in the hierarchy."""
         pass
 
     def validate_arguments(self, args):
+        """Validate arguments. Derived classes overriding this method
+           must call super().validate_arguments(parser)."""
         if "orc" == args.output_format and "gzip" == args.output_compression:
             # gzip for Parquet, zlib for ORC
             args.output_compression = "zlib"
@@ -123,6 +129,10 @@ class CCSparkJob(object):
         logging.basicConfig(level=level, format=LOGGING_FORMAT)
 
     def init_accumulators(self, sc):
+        """Register and initialize counters (aka. accumulators).
+           Derived classes may use this method to add their own
+           accumulators but must call super().init_accumulators(sc)
+           to also initialize counters from base classes."""
         self.records_processed = sc.accumulator(0)
         self.warc_input_processed = sc.accumulator(0)
         self.warc_input_failed = sc.accumulator(0)
@@ -156,16 +166,26 @@ class CCSparkJob(object):
 
         sc.stop()
 
+    def log_accumulator(self, sc, acc, descr):
+        """Log single counter/accumulator"""
+        self.get_logger(sc).info(descr.format(acc.value))
+
+    def log_accumulators(self, sc):
+        """Log counters/accumulators, see `init_accumulators`."""
+        self.log_accumulator(sc, self.warc_input_processed,
+                             'WARC/WAT/WET input files processed = {}')
+        self.log_accumulator(sc, self.warc_input_failed,
+                             'WARC/WAT/WET input files failed = {}')
+        self.log_accumulator(sc, self.records_processed,
+                             'WARC/WAT/WET records processed = {}')
+
     def log_aggregator(self, sc, agg, descr):
-        self.get_logger(sc).info(descr.format(agg.value))
+        """Deprecated, use log_accumulator."""
+        self.log_accumulator(sc, agg, descr)
 
     def log_aggregators(self, sc):
-        self.log_aggregator(sc, self.warc_input_processed,
-                            'WARC/WAT/WET input files processed = {}')
-        self.log_aggregator(sc, self.warc_input_failed,
-                            'WARC/WAT/WET input files failed = {}')
-        self.log_aggregator(sc, self.records_processed,
-                            'WARC/WAT/WET records processed = {}')
+        """Deprecated, use log_accumulators."""
+        self.log_accumulators(sc)
 
     @staticmethod
     def reduce_by_key_func(a, b):
@@ -186,9 +206,9 @@ class CCSparkJob(object):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_accumulators(sc)
 
-    def process_warcs(self, id_, iterator):
+    def process_warcs(self, _id, iterator):
         s3pattern = re.compile('^s3://([^/]+)/(.+)')
         base_dir = os.path.abspath(os.path.dirname(__file__))
 
@@ -369,7 +389,7 @@ class CCIndexSparkJob(CCSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_accumulators(sc)
 
 
 class CCIndexWarcSparkJob(CCIndexSparkJob):
@@ -457,4 +477,4 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_aggregators(sc)
+        self.log_accumulators(sc)
