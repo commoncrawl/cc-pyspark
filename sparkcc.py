@@ -463,6 +463,15 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
 
         return sqldf
 
+    def process_record_with_row(self, record, row):
+        """Process a single WARC record and the corresponding table row."""
+        if 'content_charset' in row:
+            # pass `content_charset` forward to subclass processing WARC records
+            record.rec_headers['WARC-Identified-Content-Charset'] = row['content_charset']
+        for res in self.process_record(record):
+            yield res
+
+
     def fetch_process_warc_records(self, rows):
         no_sign_request = botocore.client.Config(
             signature_version=botocore.UNSIGNED)
@@ -475,9 +484,6 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             warc_path = row['warc_filename']
             offset = int(row['warc_record_offset'])
             length = int(row['warc_record_length'])
-            content_charset = None
-            if 'content_charset' in row:
-                content_charset = row['content_charset']
             self.get_logger().debug("Fetching WARC record for {}".format(url))
             rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
             try:
@@ -494,9 +500,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             try:
                 for record in ArchiveIterator(record_stream,
                                               no_record_parse=no_parse):
-                    # pass `content_charset` forward to subclass processing WARC records
-                    record.rec_headers['WARC-Identified-Content-Charset'] = content_charset
-                    for res in self.process_record(record):
+                    for res in self.process_record_with_row(record, row):
                         yield res
                     self.records_processed.add(1)
             except ArchiveLoadFailed as exception:
