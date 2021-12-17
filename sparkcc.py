@@ -361,12 +361,9 @@ class CCIndexSparkJob(CCSparkJob):
 
     def load_dataframe(self, sc, partitions=-1):
         session = SparkSession.builder.config(conf=sc.getConf()).getOrCreate()
-        if self.args.query is not None:
-            self.load_table(sc, session, self.args.input, self.args.table)
-            sqldf = self.execute_query(sc, session, self.args.query)
-        else:
-            sqldf = session.read.format("csv").option("header", True) \
-                .option("inferSchema", True).load(self.args.csv)
+
+        self.load_table(sc, session, self.args.input, self.args.table)
+        sqldf = self.execute_query(sc, session, self.args.query)
         sqldf.persist()
 
         num_rows = sqldf.count()
@@ -377,6 +374,7 @@ class CCIndexSparkJob(CCSparkJob):
             self.get_logger(sc).info(
                 "Repartitioning data to {} partitions".format(partitions))
             sqldf = sqldf.repartition(partitions)
+            sqldf.persist()
 
         return sqldf
 
@@ -399,6 +397,9 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
 
     name = "CCIndexWarcSparkJob"
 
+    input_descr = "Path to Common Crawl index table (with option `--query`)" \
+                  " or extracted table containing WARC record coordinates"
+
     def add_arguments(self, parser):
         super(CCIndexWarcSparkJob, self).add_arguments(parser)
         agroup = parser.add_mutually_exclusive_group(required=True)
@@ -406,15 +407,61 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
                             help="SQL query to select rows. Note: the result "
                             "is required to contain the columns `url', `warc"
                             "_filename', `warc_record_offset' and `warc_record"
-                            "_length', make sure they're SELECTed. The column"
-                            "`content_charset' is optional and is utilized to"
+                            "_length', make sure they're SELECTed. The column "
+                            "`content_charset' is optional and is utilized to "
                             "read WARC record payloads with the right encoding.")
         agroup.add_argument("--csv", default=None,
                             help="CSV file to load WARC records by filename, "
                             "offset and length. The CSV file must have column "
-                            "headers and the input columns `url', `warc"
-                            "_filename', `warc_record_offset' and `warc_record"
-                            "_length' are mandatory, see also option --query.")
+                            "headers and the input columns `url', "
+                            "`warc_filename', `warc_record_offset' and "
+                            "`warc_record_length' are mandatory, see also "
+                            "option --query.\nDeprecated, use instead "
+                            "`--input_table_format csv` together with "
+                            "`--input_table_option header=True` and "
+                            "`--input_table_option inferSchema=True`.")
+        agroup.add_argument("--input_table_format", default=None,
+                            help="Data format of the input table to load WARC "
+                            "records by filename, offset and length. The input "
+                            "table is read from the path <input> and is expected "
+                            "to include the columns `url', `warc_filename', "
+                            "`warc_record_offset' and `warc_record_length'. The "
+                            "input table is typically a result of a CTAS query "
+                            "(create table as).  Allowed formats are: orc, "
+                            "json lines, csv, parquet and other formats "
+                            "supported by Spark.")
+        parser.add_argument("--input_table_option", action='append', default=[],
+                            help="Additional input option when reading data from "
+                            "an input table (see `--input_table_format`). Options "
+                            "are passed to the Spark DataFrameReader.")
+
+    def get_input_table_options(self):
+        return {x[0]: x[1] for x in map(lambda x: x.split('=', 1),
+                                        self.args.input_table_option)}
+
+    def load_dataframe(self, sc, partitions=-1):
+        if self.args.query is not None:
+            return super(CCIndexWarcSparkJob, self).load_dataframe(sc, partitions)
+
+        session = SparkSession.builder.config(conf=sc.getConf()).getOrCreate()
+
+        if self.args.csv is not None:
+            sqldf = session.read.format("csv").option("header", True) \
+                .option("inferSchema", True).load(self.args.csv)
+        elif self.args.input_table_format is not None:
+            data_format = self.args.input_table_format
+            reader = session.read.format(data_format)
+            reader = reader.options(**self.get_input_table_options())
+            sqldf = reader.load(self.args.input)
+
+        if partitions > 0:
+            self.get_logger(sc).info(
+                "Repartitioning data to {} partitions".format(partitions))
+            sqldf = sqldf.repartition(partitions)
+
+        sqldf.persist()
+
+        return sqldf
 
     def fetch_process_warc_records(self, rows):
         no_sign_request = botocore.client.Config(

@@ -18,7 +18,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
   - run a SQL query and [export the result as a table](./cc_index_export.py)
 
-  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py). Alternatively, the first step (query the columnar index) can be executed using Amazon Athena. The resulting CSV listing the records is then passed via `--csv` to the Spark job.
+  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py). Alternatively, the first step (query the columnar index) can be executed using Amazon Athena. The list of WARC record coordinates (CSV or a table created by a CTAS statement) is then passed via `--csv` or `--input_table_format`) to the Spark job.
 
 Further information about the examples and available options is shown via the [command-line option](#command-line-options) `--help`.
 
