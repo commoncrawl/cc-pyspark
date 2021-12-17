@@ -22,6 +22,9 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
 Further information about the examples and available options is shown via the [command-line option](#command-line-options) `--help`.
 
+## Implementing a Custom Extractor
+
+Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases it's sufficient to override a single method (`process_record`). Have a look at one of the examples, eg. to [count HTML tags](./html_tag_count.py).
 
 ## Setup
 
@@ -36,7 +39,7 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with Spark 2.1.0 – 2.4.6 in combination with Python 2.7 or 3.5, 3.6, 3.7, and with Spark 3.0.0 in combination with Python 3.7 and 3.8
+Tested with Spark 2.1.0 – 2.4.6 in combination with Python 2.7 or 3.5, 3.6, 3.7, and with Spark 3.0.0 - 3.2.0 in combination with Python 3.7 and 3.8
 
 
 ## Get Sample Data
@@ -52,6 +55,8 @@ Alternatively, running `get-data.sh` will download the sample data. It also writ
 
 Note that the sample data is from an older crawl (`CC-MAIN-2017-13` run in March 2017). If you want to use more recent data, please visit the [Common Crawl site](https://commoncrawl.org/the-data/get-started/).
 
+
+## Process Common Crawl Data on Spark
 
 ### Running locally
 
