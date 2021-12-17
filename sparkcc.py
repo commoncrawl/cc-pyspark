@@ -195,7 +195,7 @@ class CCSparkJob(object):
         # S3 client (not thread-safe, initialize outside parallelized loop)
         no_sign_request = botocore.client.Config(
             signature_version=botocore.UNSIGNED)
-        s3client = boto3.client('s3', config=no_sign_request)
+        s3client = boto3.client('s3', config=no_sign_request, use_ssl=False)
 
         for uri in iterator:
             self.warc_input_processed.add(1)
@@ -399,7 +399,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
     def fetch_process_warc_records(self, rows):
         no_sign_request = botocore.client.Config(
             signature_version=botocore.UNSIGNED)
-        s3client = boto3.client('s3', config=no_sign_request)
+        s3client = boto3.client('s3', config=no_sign_request, use_ssl=False)
         bucketname = "commoncrawl"
         no_parse = (not self.warc_parse_http_header)
 
