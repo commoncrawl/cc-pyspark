@@ -13,8 +13,7 @@ import botocore
 from warcio.archiveiterator import ArchiveIterator
 from warcio.recordloader import ArchiveLoadFailed
 
-from pyspark import SparkContext, SparkConf
-from pyspark.sql import SQLContext, SparkSession
+from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 
 LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
@@ -98,7 +97,6 @@ class CCSparkJob(object):
         args = arg_parser.parse_args()
         if not self.validate_arguments(args):
             raise Exception("Arguments not valid")
-        self.init_logging(args.log_level)
 
         return args
 
@@ -121,84 +119,80 @@ class CCSparkJob(object):
         return {x[0]: x[1] for x in map(lambda x: x.split('=', 1),
                                         self.args.output_option)}
 
-    def init_logging(self, level=None):
+    def init_logging(self, level=None, session=None):
         if level is None:
             level = self.log_level
         else:
             self.log_level = level
         logging.basicConfig(level=level, format=LOGGING_FORMAT)
+        if session:
+            session.sparkContext.setLogLevel(level)
 
-    def init_accumulators(self, sc):
+
+    def init_accumulators(self, session):
         """Register and initialize counters (aka. accumulators).
            Derived classes may use this method to add their own
-           accumulators but must call super().init_accumulators(sc)
+           accumulators but must call super().init_accumulators(session)
            to also initialize counters from base classes."""
+        sc = session.sparkContext
         self.records_processed = sc.accumulator(0)
         self.warc_input_processed = sc.accumulator(0)
         self.warc_input_failed = sc.accumulator(0)
 
-    def get_logger(self, spark_context=None):
-        """Get logger from SparkContext or (if None) from logging module"""
-        if spark_context is None:
-            return logging.getLogger(self.name)
-        return spark_context._jvm.org.apache.log4j.LogManager \
-            .getLogger(self.name)
+    def get_logger(self, session=None):
+        """Get logger from SparkSession or (if None) from logging module"""
+        if not session:
+            session = SparkSession.getActiveSession()
+        if session:
+            return session._jvm.org.apache.log4j.LogManager \
+                        .getLogger(self.name)
+        return logging.getLogger(self.name)
 
     def run(self):
         self.args = self.parse_arguments()
 
-        conf = SparkConf()
+        builder = SparkSession.builder.appName(self.name)
 
         if self.args.spark_profiler:
-            conf = conf.set("spark.python.profile", "true")
+            builder.config("spark.python.profile", "true")
 
-        sc = SparkContext(
-            appName=self.name,
-            conf=conf)
-        sqlc = SQLContext(sparkContext=sc)
+        session = builder.getOrCreate()
 
-        self.init_accumulators(sc)
+        self.init_logging(self.args.log_level, session)
+        self.init_accumulators(session)
 
-        self.run_job(sc, sqlc)
+        self.run_job(session)
 
         if self.args.spark_profiler:
-            sc.show_profiles()
+            session.sparkContext.show_profiles()
 
-        sc.stop()
+        session.stop()
 
-    def log_accumulator(self, sc, acc, descr):
+    def log_accumulator(self, session, acc, descr):
         """Log single counter/accumulator"""
-        self.get_logger(sc).info(descr.format(acc.value))
+        self.get_logger(session).info(descr.format(acc.value))
 
-    def log_accumulators(self, sc):
+    def log_accumulators(self, session):
         """Log counters/accumulators, see `init_accumulators`."""
-        self.log_accumulator(sc, self.warc_input_processed,
+        self.log_accumulator(session, self.warc_input_processed,
                              'WARC/WAT/WET input files processed = {}')
-        self.log_accumulator(sc, self.warc_input_failed,
+        self.log_accumulator(session, self.warc_input_failed,
                              'WARC/WAT/WET input files failed = {}')
-        self.log_accumulator(sc, self.records_processed,
+        self.log_accumulator(session, self.records_processed,
                              'WARC/WAT/WET records processed = {}')
-
-    def log_aggregator(self, sc, agg, descr):
-        """Deprecated, use log_accumulator."""
-        self.log_accumulator(sc, agg, descr)
-
-    def log_aggregators(self, sc):
-        """Deprecated, use log_accumulators."""
-        self.log_accumulators(sc)
 
     @staticmethod
     def reduce_by_key_func(a, b):
         return a + b
 
-    def run_job(self, sc, sqlc):
-        input_data = sc.textFile(self.args.input,
-                                 minPartitions=self.args.num_input_partitions)
+    def run_job(self, session):
+        input_data = session.sparkContext.textFile(self.args.input,
+                                                   minPartitions=self.args.num_input_partitions)
 
         output = input_data.mapPartitionsWithIndex(self.process_warcs) \
             .reduceByKey(self.reduce_by_key_func)
 
-        sqlc.createDataFrame(output, schema=self.output_schema) \
+        session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
             .write \
             .format(self.args.output_format) \
@@ -206,7 +200,7 @@ class CCSparkJob(object):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_accumulators(sc)
+        self.log_accumulators(session)
 
     def process_warcs(self, _id, iterator):
         s3pattern = re.compile('^s3://([^/]+)/(.+)')
@@ -340,46 +334,44 @@ class CCIndexSparkJob(CCSparkJob):
                             help="JSON schema of the ccindex table,"
                             " implied from Parquet files if not provided.")
 
-    def load_table(self, sc, spark, table_path, table_name):
-        parquet_reader = spark.read.format('parquet')
+    def load_table(self, session, table_path, table_name):
+        parquet_reader = session.read.format('parquet')
         if self.args.table_schema is not None:
-            self.get_logger(sc).info(
+            self.get_logger(session).info(
                 "Reading table schema from {}".format(self.args.table_schema))
             with open(self.args.table_schema, 'r') as s:
                 schema = StructType.fromJson(json.loads(s.read()))
             parquet_reader = parquet_reader.schema(schema)
         df = parquet_reader.load(table_path)
         df.createOrReplaceTempView(table_name)
-        self.get_logger(sc).info(
+        self.get_logger(session).info(
             "Schema of table {}:\n{}".format(table_name, df.schema))
 
-    def execute_query(self, sc, spark, query):
-        sqldf = spark.sql(query)
-        self.get_logger(sc).info("Executing query: {}".format(query))
+    def execute_query(self, session, query):
+        sqldf = session.sql(query)
+        self.get_logger(session).info("Executing query: {}".format(query))
         sqldf.explain()
         return sqldf
 
-    def load_dataframe(self, sc, partitions=-1):
-        session = SparkSession.builder.config(conf=sc.getConf()).getOrCreate()
-
-        self.load_table(sc, session, self.args.input, self.args.table)
-        sqldf = self.execute_query(sc, session, self.args.query)
+    def load_dataframe(self, session, partitions=-1):
+        self.load_table(session, self.args.input, self.args.table)
+        sqldf = self.execute_query(session, self.args.query)
         sqldf.persist()
 
         num_rows = sqldf.count()
-        self.get_logger(sc).info(
+        self.get_logger(session).info(
             "Number of records/rows matched by query: {}".format(num_rows))
 
         if partitions > 0:
-            self.get_logger(sc).info(
+            self.get_logger(session).info(
                 "Repartitioning data to {} partitions".format(partitions))
             sqldf = sqldf.repartition(partitions)
             sqldf.persist()
 
         return sqldf
 
-    def run_job(self, sc, sqlc):
-        sqldf = self.load_dataframe(sc, self.args.num_output_partitions)
+    def run_job(self, session):
+        sqldf = self.load_dataframe(session, self.args.num_output_partitions)
 
         sqldf.write \
             .format(self.args.output_format) \
@@ -387,7 +379,7 @@ class CCIndexSparkJob(CCSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_accumulators(sc)
+        self.log_accumulators(session)
 
 
 class CCIndexWarcSparkJob(CCIndexSparkJob):
@@ -439,11 +431,9 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
         return {x[0]: x[1] for x in map(lambda x: x.split('=', 1),
                                         self.args.input_table_option)}
 
-    def load_dataframe(self, sc, partitions=-1):
+    def load_dataframe(self, session, partitions=-1):
         if self.args.query is not None:
-            return super(CCIndexWarcSparkJob, self).load_dataframe(sc, partitions)
-
-        session = SparkSession.builder.config(conf=sc.getConf()).getOrCreate()
+            return super(CCIndexWarcSparkJob, self).load_dataframe(session, partitions)
 
         if self.args.csv is not None:
             sqldf = session.read.format("csv").option("header", True) \
@@ -455,7 +445,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             sqldf = reader.load(self.args.input)
 
         if partitions > 0:
-            self.get_logger(sc).info(
+            self.get_logger(session).info(
                 "Repartitioning data to {} partitions".format(partitions))
             sqldf = sqldf.repartition(partitions)
 
@@ -509,8 +499,8 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
                     'Invalid WARC record: {} ({}, offset: {}, length: {}) - {}'
                     .format(url, warc_path, offset, length, exception))
 
-    def run_job(self, sc, sqlc):
-        sqldf = self.load_dataframe(sc, self.args.num_input_partitions)
+    def run_job(self, session):
+        sqldf = self.load_dataframe(session, self.args.num_input_partitions)
 
         columns = ['url', 'warc_filename', 'warc_record_offset', 'warc_record_length']
         if 'content_charset' in sqldf.columns:
@@ -520,7 +510,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
         output = warc_recs.mapPartitions(self.fetch_process_warc_records) \
             .reduceByKey(self.reduce_by_key_func)
 
-        sqlc.createDataFrame(output, schema=self.output_schema) \
+        session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
             .write \
             .format(self.args.output_format) \
@@ -528,4 +518,4 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .options(**self.get_output_options()) \
             .saveAsTable(self.args.output)
 
-        self.log_accumulators(sc)
+        self.log_accumulators(session)

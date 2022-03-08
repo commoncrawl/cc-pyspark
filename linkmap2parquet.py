@@ -15,15 +15,15 @@ class LinkMapImportJob(CCSparkJob):
     def map_line(self, line):
         return line.split('\t')
 
-    def run_job(self, sc, sqlc):
+    def run_job(self, session):
         output = None
         if self.args.input != '':
-            input_data = sc.textFile(
+            input_data = session.sparkContext.textFile(
                 self.args.input,
                 minPartitions=self.args.num_input_partitions)
             output = input_data.map(self.map_line)
 
-        df = sqlc.createDataFrame(output, schema=self.output_schema)
+        df = session.createDataFrame(output, schema=self.output_schema)
 
         df.dropDuplicates() \
           .coalesce(self.args.num_output_partitions) \

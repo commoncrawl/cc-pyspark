@@ -16,18 +16,19 @@ class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
     records_parsing_failed = None
     records_non_html = None
 
-    def init_accumulators(self, sc):
-        super(CCIndexWordCountJob, self).init_accumulators(sc)
+    def init_accumulators(self, session):
+        super(CCIndexWordCountJob, self).init_accumulators(session)
 
+        sc = session.sparkContext
         self.records_parsing_failed = sc.accumulator(0)
         self.records_non_html = sc.accumulator(0)
 
-    def log_accumulators(self, sc):
-        super(CCIndexWordCountJob, self).log_accumulators(sc)
+    def log_accumulators(self, session):
+        super(CCIndexWordCountJob, self).log_accumulators(session)
 
-        self.log_accumulator(sc, self.records_parsing_failed,
+        self.log_accumulator(session, self.records_parsing_failed,
                              'records failed to parse = {}')
-        self.log_accumulator(sc, self.records_non_html,
+        self.log_accumulator(session, self.records_non_html,
                              'records not HTML = {}')
 
     @staticmethod

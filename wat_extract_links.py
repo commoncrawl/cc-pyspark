@@ -139,7 +139,7 @@ class ExtractLinksJob(CCSparkJob):
                 try:
                     redir_to = redir_to.decode('utf-8')
                 except UnicodeError as e:
-                    self.get_logger().warn(
+                    self.get_logger().warning(
                         'URL with unknown encoding: {} - {}'.format(
                             redir_to, e))
                     return
@@ -242,9 +242,10 @@ class ExtractLinksJob(CCSparkJob):
                 url, e))
             self.records_failed.add(1)
 
-    def init_accumulators(self, sc):
-        super(ExtractLinksJob, self).init_accumulators(sc)
+    def init_accumulators(self, session):
+        super(ExtractLinksJob, self).init_accumulators(session)
 
+        sc = session.sparkContext
         self.records_failed = sc.accumulator(0)
         self.records_non_html = sc.accumulator(0)
         self.records_response = sc.accumulator(0)
@@ -254,49 +255,49 @@ class ExtractLinksJob(CCSparkJob):
         self.records_response_robotstxt = sc.accumulator(0)
         self.link_count = sc.accumulator(0)
 
-    def log_accumulators(self, sc):
-        super(ExtractLinksJob, self).log_accumulators(sc)
+    def log_accumulators(self, session):
+        super(ExtractLinksJob, self).log_accumulators(session)
 
-        self.log_accumulator(sc, self.records_response,
+        self.log_accumulator(session, self.records_response,
                              'response records = {}')
-        self.log_accumulator(sc, self.records_failed,
+        self.log_accumulator(session, self.records_failed,
                              'records failed to process = {}')
-        self.log_accumulator(sc, self.records_non_html,
+        self.log_accumulator(session, self.records_non_html,
                              'records not HTML = {}')
-        self.log_accumulator(sc, self.records_response_wat,
+        self.log_accumulator(session, self.records_response_wat,
                              'response records WAT = {}')
-        self.log_accumulator(sc, self.records_response_warc,
+        self.log_accumulator(session, self.records_response_warc,
                              'response records WARC = {}')
-        self.log_accumulator(sc, self.records_response_redirect,
+        self.log_accumulator(session, self.records_response_redirect,
                              'response records redirects = {}')
-        self.log_accumulator(sc, self.records_response_robotstxt,
+        self.log_accumulator(session, self.records_response_robotstxt,
                              'response records robots.txt = {}')
-        self.log_accumulator(sc, self.link_count,
+        self.log_accumulator(session, self.link_count,
                              'non-unique link pairs = {}')
 
-    def run_job(self, sc, sqlc):
+    def run_job(self, session):
         output = None
         if self.args.input != '':
-            input_data = sc.textFile(
+            input_data = session.sparkContext.textFile(
                 self.args.input,
                 minPartitions=self.args.num_input_partitions)
             output = input_data.mapPartitionsWithIndex(self.process_warcs)
 
         if self.args.intermediate_output is None:
-            df = sqlc.createDataFrame(output, schema=self.output_schema)
+            df = session.createDataFrame(output, schema=self.output_schema)
         else:
             if output is not None:
-                sqlc.createDataFrame(output, schema=self.output_schema) \
+                session.createDataFrame(output, schema=self.output_schema) \
                     .write \
                     .format(self.args.output_format) \
                     .option("compression", self.args.output_compression) \
                     .saveAsTable(self.args.intermediate_output)
-                self.log_accumulators(sc)
-            warehouse_dir = sc.getConf().get('spark.sql.warehouse.dir',
+                self.log_accumulators(session.sparkContext)
+            warehouse_dir = session.conf.get('spark.sql.warehouse.dir',
                                              'spark-warehouse')
             intermediate_output = os.path.join(warehouse_dir,
                                                self.args.intermediate_output)
-            df = sqlc.read.parquet(intermediate_output)
+            df = session.read.parquet(intermediate_output)
 
         df.dropDuplicates() \
           .coalesce(self.args.num_output_partitions) \
@@ -306,7 +307,7 @@ class ExtractLinksJob(CCSparkJob):
           .option("compression", self.args.output_compression) \
           .saveAsTable(self.args.output)
 
-        self.log_accumulators(sc)
+        self.log_accumulators(session.sparkContext)
 
 
 class ExtractHostLinksJob(ExtractLinksJob):
@@ -480,7 +481,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
                     if thost and src_host and src_host != thost:
                         yield src_host, thost
                 except UnicodeError as e:
-                    self.get_logger().warn(
+                    self.get_logger().warning(
                         'URL with unknown encoding: {} - {}'.format(
                             sitemap, e))
             line = stream.readline()
