@@ -39,7 +39,7 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with Spark 2.1.0 – 2.4.6 in combination with Python 2.7 or 3.5, 3.6, 3.7, and with Spark 3.0.0 - 3.2.0 in combination with Python 3.7 and 3.8
+Tested with Spark 2.1.0 – 2.4.6 in combination with Python 2.7 or 3.5, 3.6, 3.7, and with Spark 3.0.0 - 3.2.1 in combination with Python 3.7, 3.8 and 3.9.
 
 
 ## Get Sample Data
@@ -49,9 +49,10 @@ To develop locally, you'll need at least three data files – one for each forma
 * [wat.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wat/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wat.gz)
 * [wet.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wet/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wet.gz)
 
-Alternatively, running `get-data.sh` will download the sample data. It also writes input files containing
+Alternatively, running `get-data.sh` downloads the sample data. It also writes input files containing
 * sample input as `file://` URLs
-* all input of one monthly crawl as `s3://` URLs
+* all input of one monthly crawl as relative paths
+  - to use with `--input_base_url s3://commoncrawl/` resp. `--input_base_url https://data.commoncrawl.org/`
 
 Note that the sample data is from an older crawl (`CC-MAIN-2017-13` run in March 2017). If you want to use more recent data, please visit the [Common Crawl site](https://commoncrawl.org/the-data/get-started/).
 
@@ -129,20 +130,29 @@ $SPARK_HOME/bin/spark-submit \
     ... (program-specific options)
 ```
 
+#### Authenticated S3 Access or Access Via HTTP
+
+Since April 2022 there are two ways to access of Common Crawl data:
+- using HTTP/HTTPS and the base URL `https://data.commoncrawl.org/` or `https://ds5q9oxwqwsfj.cloudfront.net/`
+- using the S3 API to read the bucket `s3://commoncrawl/` requires authentication and makes an Amazon Web Services account mandatory.
+
+This project cc-pyspark uses [boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) to access WARC, WAT or WET files on `s3://commoncrawl/`. The best way is to ensure that a S3 read-only IAM policy is attached to the the IAM role of the EC2 instances where Common Crawl data is processed, see the [IAM user guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html). If this is no option (or if the processing is not running on AWS), boto3 can be [configured to use a IAM profile](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html#configuration).
+
 
 ### Installation of S3 Support Libraries
 
-While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages org.apache.hadoop:hadoop-aws:3.2.0` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management) - the hadoop-aws package and transitive dependencies are downloaded as Maven dependencies. Note that the required version of hadoop-aws package depends on the Hadoop version bundled with your Spark installation, e.g., Spark 3.0.0 bundled with Hadoop 3.2.0 ([spark-3.0.0-bin-hadoop3.2.tgz](https://archive.apache.org/dist/spark/spark-3.0.0/spark-3.0.0-bin-hadoop3.2.tgz)).
+While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages org.apache.hadoop:hadoop-aws:3.2.1` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management) - the hadoop-aws package and transitive dependencies are downloaded as Maven dependencies. Note that the required version of hadoop-aws package depends on the Hadoop version bundled with your Spark installation, e.g., Spark 3.2.1 bundled with Hadoop 3.2 ([spark-3.2.1-bin-hadoop3.2.tgz](https://archive.apache.org/dist/spark/spark-3.2.1/spark-3.2.1-bin-hadoop3.2.tgz)).
 
 Please also note that:
 - the schema of the URL referencing the columnar index depends on the actual S3 file system implementation: it's `s3://` on EMR but `s3a://` when using [s3a](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Introducing_the_Hadoop_S3A_client.).
-- data can be accessed anonymously using [s3a.AnonymousAWSCredentialsProvider](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Anonymous_Login_with_AnonymousAWSCredentialsProvider). This requires Hadoop 2.9 or newer.
-- without anonymous access valid AWS credentials need to be provided, e.g., by setting `spark.hadoop.fs.s3a.access.key` and `spark.hadoop.fs.s3a.secret.key` in the Spark configuration.
+- (since April 2022) only authenticated S3 access is possible. This requires that access to S3 is properly set up. For configuration details, see
+  [Authorizing access to EMRFS data in Amazon S3](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-plan-credentialsprovider.html)
+  or [Hadoop-AWS: Authenticating with S3](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Authenticating_with_S3).
 
 Example call to count words in 10 WARC records host under the `.is` top-level domain:
 ```
 $SPARK_HOME/bin/spark-submit \
-    --packages org.apache.hadoop:hadoop-aws:3.2.0 \
+    --packages org.apache.hadoop:hadoop-aws:3.3.2 \
     --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider \
     ./cc_index_word_count.py \
     --query "SELECT url, warc_filename, warc_record_offset, warc_record_length, content_charset FROM ccindex WHERE crawl = 'CC-MAIN-2020-24' AND subset = 'warc' AND url_host_tld = 'is' LIMIT 10" \

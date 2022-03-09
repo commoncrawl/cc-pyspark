@@ -5,16 +5,18 @@ import os
 import re
 
 from io import BytesIO
-from tempfile import TemporaryFile
+from tempfile import SpooledTemporaryFile, TemporaryFile
 
 import boto3
 import botocore
+import requests
 
 from warcio.archiveiterator import ArchiveIterator
 from warcio.recordloader import ArchiveLoadFailed
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType
+
 
 LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 
@@ -31,10 +33,11 @@ class CCSparkJob(object):
         StructField("val", LongType(), True)
     ])
 
-    # description of input and output shown in --help
+    # description of input and output shown by --help
     input_descr = "Path to file listing input paths"
     output_descr = "Name of output table (saved in spark.sql.warehouse.dir)"
 
+    # parse HTTP headers of WARC records (derived classes may override this)
     warc_parse_http_header = True
 
     args = None
@@ -46,6 +49,14 @@ class CCSparkJob(object):
 
     num_input_partitions = 400
     num_output_partitions = 10
+
+    # S3 client is thread-safe, cf.
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/clients.html#multithreading-or-multiprocessing-with-clients)
+    s3client = None
+
+    # pattern to split a data URL (<scheme>://<netloc>/<path> or <scheme>:/<path>)
+    data_url_pattern = re.compile('^(s3|https?|file|hdfs):(?://([^/]*))?/(.*)')
+
 
     def parse_arguments(self):
         """Returns the parsed arguments from the command line"""
@@ -60,6 +71,11 @@ class CCSparkJob(object):
         arg_parser.add_argument("input", help=self.input_descr)
         arg_parser.add_argument("output", help=self.output_descr)
 
+        arg_parser.add_argument("--input_base_url",
+                                help="Base URL (prefix) used if paths to WARC/WAT/WET "
+                                "files are relative paths. Used to select the "
+                                "access method: s3://commoncrawl/ (authenticated "
+                                "S3) or https://data.commoncrawl.org/ (HTTP)")
         arg_parser.add_argument("--num_input_partitions", type=int,
                                 default=self.num_input_partitions,
                                 help="Number of input splits/partitions, "
@@ -116,14 +132,15 @@ class CCSparkJob(object):
         return True
 
     def get_output_options(self):
+        """Convert output options strings (opt=val) to kwargs"""
         return {x[0]: x[1] for x in map(lambda x: x.split('=', 1),
                                         self.args.output_option)}
 
     def init_logging(self, level=None, session=None):
-        if level is None:
-            level = self.log_level
-        else:
+        if level:
             self.log_level = level
+        else:
+            level = self.log_level
         logging.basicConfig(level=level, format=LOGGING_FORMAT)
         if session:
             session.sparkContext.setLogLevel(level)
@@ -149,6 +166,7 @@ class CCSparkJob(object):
         return logging.getLogger(self.name)
 
     def run(self):
+        """Run the job"""
         self.args = self.parse_arguments()
 
         builder = SparkSession.builder.appName(self.name)
@@ -202,59 +220,128 @@ class CCSparkJob(object):
 
         self.log_accumulators(session)
 
-    def process_warcs(self, _id, iterator):
-        s3pattern = re.compile('^s3://([^/]+)/(.+)')
-        base_dir = os.path.abspath(os.path.dirname(__file__))
+    def get_s3_client(self):
+        if not self.s3client:
+            self.s3client = boto3.client('s3', use_ssl=False)
+        return self.s3client
 
-        # S3 client (not thread-safe, initialize outside parallelized loop)
-        no_sign_request = botocore.client.Config(
-            signature_version=botocore.UNSIGNED)
-        s3client = boto3.client('s3', config=no_sign_request, use_ssl=False)
+    def fetch_warc(self, uri, base_uri=None, offset=-1, length=-1):
+        """Fetch WARC/WAT/WET files (or a record if offset and length are given)"""
 
-        for uri in iterator:
-            self.warc_input_processed.add(1)
-            if uri.startswith('s3://'):
-                self.get_logger().info('Reading from S3 {}'.format(uri))
-                s3match = s3pattern.match(uri)
-                if s3match is None:
-                    self.get_logger().error("Invalid S3 URI: " + uri)
-                    continue
-                bucketname = s3match.group(1)
-                path = s3match.group(2)
-                warctemp = TemporaryFile(mode='w+b',
-                                         dir=self.args.local_temp_dir)
+        (scheme, netloc, path) = (None, None, None)
+        uri_match = self.data_url_pattern.match(uri)
+        if not uri_match and base_uri:
+            # relative input URI (path) and base URI defined
+            uri = base_uri + uri
+            uri_match = self.data_url_pattern.match(uri)
+
+        if uri_match:
+            (scheme, netloc, path) = uri_match.groups()
+        else:
+            # keep local file paths as is
+            path = uri
+
+        stream = None
+
+        if scheme == 's3':
+            bucketname = netloc
+            if not bucketname:
+                self.get_logger().error("Invalid S3 URI: " + uri)
+                return
+            if not path:
+                self.get_logger().error("Empty S3 path: " + uri)
+                return
+            elif path[0] == '/':
+                # must strip leading / in S3 path
+                path = path[1:]
+            if offset > -1 and length > 0:
+                rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
+                # Note: avoid logging too many small fetches
+                #self.get_logger().debug('Fetching {} ({})'.format(uri, rangereq))
                 try:
-                    s3client.download_fileobj(bucketname, path, warctemp)
+                    response = self.get_s3_client().get_object(Bucket=bucketname,
+                                                               Key=path,
+                                                               Range=rangereq)
+                    stream = BytesIO(response["Body"].read())
+                except botocore.client.ClientError as exception:
+                    self.get_logger().error(
+                        'Failed to download: s3://{}/{} (offset: {}, length: {}) - {}'
+                        .format(bucketname, path, offset, length, exception))
+                    self.warc_input_failed.add(1)
+                    return
+            else:
+                self.get_logger().info('Reading from S3 {}'.format(uri))
+                # download entire file using a temporary file for buffering
+                warctemp = TemporaryFile(mode='w+b', dir=self.args.local_temp_dir)
+                try:
+                    self.get_s3_client().download_fileobj(bucketname, path, warctemp)
+                    warctemp.seek(0)
+                    stream = warctemp
                 except botocore.client.ClientError as exception:
                     self.get_logger().error(
                         'Failed to download {}: {}'.format(uri, exception))
                     self.warc_input_failed.add(1)
                     warctemp.close()
-                    continue
+
+        elif scheme == 'http' or scheme == 'https':
+            headers = None
+            if offset > -1 and length > 0:
+                headers = {
+                    "Range": "bytes={}-{}".format(offset, (offset + length - 1))
+                }
+                # Note: avoid logging many small fetches
+                #self.get_logger().debug('Fetching {} ({})'.format(uri, headers))
+            else:
+                self.get_logger().info('Fetching {}'.format(uri))
+            response = requests.get(uri, headers=headers)
+
+            if response.ok:
+                # includes "HTTP 206 Partial Content" for range requests
+                warctemp = SpooledTemporaryFile(max_size=2097152,
+                                                mode='w+b',
+                                                dir=self.args.local_temp_dir)
+                warctemp.write(response.content)
                 warctemp.seek(0)
                 stream = warctemp
-            elif uri.startswith('hdfs:/'):
-                try:
-                    import pydoop.hdfs as hdfs
-                    self.get_logger().error("Reading from HDFS {}".format(uri))
-                    stream = hdfs.open(uri)
-                except RuntimeError as exception:
-                    self.get_logger().error(
-                        'Failed to open {}: {}'.format(uri, exception))
-                    self.warc_input_failed.add(1)
-                    continue
             else:
-                self.get_logger().info('Reading local stream {}'.format(uri))
-                if uri.startswith('file:'):
-                    uri = uri[5:]
+                self.get_logger().error(
+                    'Failed to download {}: {}'.format(uri, response.status_code))
+
+        elif scheme == 'hdfs':
+            try:
+                import pydoop.hdfs as hdfs
+                self.get_logger().error("Reading from HDFS {}".format(uri))
+                stream = hdfs.open(uri)
+            except RuntimeError as exception:
+                self.get_logger().error(
+                    'Failed to open {}: {}'.format(uri, exception))
+                self.warc_input_failed.add(1)
+
+        else:
+            self.get_logger().info('Reading local file {}'.format(uri))
+            if scheme == 'file':
+                # must be an absolute path
+                uri = os.path.join('/', path)
+            else:
+                base_dir = os.path.abspath(os.path.dirname(__file__))
                 uri = os.path.join(base_dir, uri)
-                try:
-                    stream = open(uri, 'rb')
-                except IOError as exception:
-                    self.get_logger().error(
-                        'Failed to open {}: {}'.format(uri, exception))
-                    self.warc_input_failed.add(1)
-                    continue
+            try:
+                stream = open(uri, 'rb')
+            except IOError as exception:
+                self.get_logger().error(
+                    'Failed to open {}: {}'.format(uri, exception))
+                self.warc_input_failed.add(1)
+
+        return stream
+
+    def process_warcs(self, _id, iterator):
+        """Process WARC/WAT/WET files, calling iterate_records(...) for each file"""
+        for uri in iterator:
+            self.warc_input_processed.add(1)
+
+            stream = self.fetch_warc(uri, self.args.input_base_url)
+            if not stream:
+                continue
 
             no_parse = (not self.warc_parse_http_header)
             try:
@@ -270,6 +357,7 @@ class CCSparkJob(object):
                 stream.close()
 
     def process_record(self, record):
+        """Process a single WARC/WAT/WET record"""
         raise NotImplementedError('Processing record needs to be customized')
 
     def iterate_records(self, _warc_uri, archive_iterator):
@@ -461,12 +549,10 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
         for res in self.process_record(record):
             yield res
 
-
     def fetch_process_warc_records(self, rows):
-        no_sign_request = botocore.client.Config(
-            signature_version=botocore.UNSIGNED)
-        s3client = boto3.client('s3', config=no_sign_request, use_ssl=False)
-        bucketname = "commoncrawl"
+        """Fetch and process WARC records specified by columns warc_filename, 
+        warc_record_offset and warc_record_length in rows"""
+
         no_parse = (not self.warc_parse_http_header)
 
         for row in rows:
@@ -475,18 +561,7 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             offset = int(row['warc_record_offset'])
             length = int(row['warc_record_length'])
             self.get_logger().debug("Fetching WARC record for {}".format(url))
-            rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
-            try:
-                response = s3client.get_object(Bucket=bucketname,
-                                               Key=warc_path,
-                                               Range=rangereq)
-            except botocore.client.ClientError as exception:
-                self.get_logger().error(
-                    'Failed to download: {} ({}, offset: {}, length: {}) - {}'
-                    .format(url, warc_path, offset, length, exception))
-                self.warc_input_failed.add(1)
-                continue
-            record_stream = BytesIO(response["Body"].read())
+            record_stream = self.fetch_warc(warc_path, self.args.input_base_url, offset, length)
             try:
                 for record in ArchiveIterator(record_stream,
                                               no_record_parse=no_parse):

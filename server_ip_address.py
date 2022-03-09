@@ -2,10 +2,10 @@ import ujson as json
 
 try:
     # Python2
-    from urlparse import urljoin, urlparse
+    from urlparse import urlparse
 except ImportError:
     # Python3
-    from urllib.parse import urljoin, urlparse
+    from urllib.parse import urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 
@@ -13,7 +13,7 @@ from sparkcc import CCSparkJob
 
 
 class ServerIPAddressJob(CCSparkJob):
-    """ Gather server IP addresses from WARC response records
+    """ Collect server IP addresses from WARC response records
         (WARC and WAT is allowed as input)"""
 
     name = "ServerIPAddresses"

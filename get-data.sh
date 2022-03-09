@@ -2,7 +2,8 @@
 
 CRAWL=CC-MAIN-2017-13
 
-BASE_URL=https://commoncrawl.s3.amazonaws.com
+# base URL used to download the path listings
+BASE_URL=https://data.commoncrawl.org
 
 set -e
 
@@ -16,7 +17,7 @@ fi
 
 for data_type in warc wat wet; do
 
-	echo "Downloading sample $data_type file..."
+	echo "Downloading Common Crawl paths listings (${data_type^^} files of $CRAWL)..."
 
 	mkdir -p crawl-data/$CRAWL/
 	listing=crawl-data/$CRAWL/$data_type.paths.gz
@@ -24,15 +25,23 @@ for data_type in warc wat wet; do
 	wget --timestamping $BASE_URL/$listing
 	cd -
 
+	echo "Downloading sample ${data_type^^} file..."
+
 	file=$(gzip -dc $listing | head -1)
 	mkdir -p $(dirname $file)
 	cd $(dirname $file)
 	wget --timestamping $BASE_URL/$file
 	cd -
 
-	echo file:$PWD/$file >>input/test_${data_type}.txt
-	gzip -dc $listing | sed 's@^@s3://commoncrawl/@' \
-		>input/all_${data_type}_$CRAWL.txt
+	echo "Writing input file listings..."
+
+	input=input/test_${data_type}.txt
+	echo "Test file: $input"
+	echo file:$PWD/$file >>$input
+
+	input=input/all_${data_type}_${CRAWL}.txt
+	echo "All ${data_type^^} files of ${CRAWL}: $input"
+	gzip -dc $listing >$input
 
 done
 

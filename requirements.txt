@@ -1,5 +1,6 @@
 botocore
 boto3
+requests
 ujson
 warcio
 
