@@ -170,7 +170,7 @@ class ExtractLinksJob(CCSparkJob):
 
     def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
         # base_url = urlparse(base)
-        if base_url is None:
+        if not base_url:
             base_url = from_url
         has_links = False
         for l in links:
@@ -283,7 +283,7 @@ class ExtractLinksJob(CCSparkJob):
                 minPartitions=self.args.num_input_partitions)
             output = input_data.mapPartitionsWithIndex(self.process_warcs)
 
-        if self.args.intermediate_output is None:
+        if not self.args.intermediate_output:
             df = session.createDataFrame(output, schema=self.output_schema)
         else:
             if output is not None:
@@ -356,7 +356,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
             except Exception as e:
                 # self.get_logger().debug("Failed to parse URL {}: {}\n".format(url, e))
                 return None
-            if host is None:
+            if not host:
                 return None
         host = host.strip().lower()
         if len(host) < 1 or len(host) > 253:
@@ -395,19 +395,19 @@ class ExtractHostLinksJob(ExtractLinksJob):
     def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
         from_host = ExtractHostLinksJob.get_surt_host(from_url)
         base_host = None
-        if from_host is None:
-            if base_url is None:
-                return
-            else:
+        if not from_host:
+            if base_url:
                 base_host = ExtractHostLinksJob.get_surt_host(base_url)
-                if base_host is None:
-                    return
-                else:
+                if base_host:
                     from_host = base_host
+                else:
+                    return
+            else:
+                return
         target_hosts = set()
         inner_host_links = 0
         for l in links:
-            if l is None:
+            if not l:
                 continue
             if url_attr in l:
                 link = l[url_attr]
@@ -418,7 +418,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
             if self.global_link_pattern.match(link):
                 try:
                     thost = ExtractHostLinksJob.get_surt_host(link)
-                    if thost is None:
+                    if not thost:
                         pass  # no host, e.g., http:///abc/, file:///C:...
                     elif thost == from_host:
                         pass  # global link to same host
@@ -431,18 +431,17 @@ class ExtractHostLinksJob(ExtractLinksJob):
         for t in target_hosts:
             yield from_host, t
         if inner_host_links > 0 and base_url is not None:
-            if base_host is None:
+            if not base_host:
                 base_host = ExtractHostLinksJob.get_surt_host(base_url)
-            if base_host is not None and base_host != from_host:
+            if base_host and base_host != from_host:
                 # any internal link becomes an external link
                 yield from_host, base_host
 
     def yield_link(self, src, target):
         src_host = ExtractHostLinksJob.get_surt_host(src)
         thost = ExtractHostLinksJob.get_surt_host(target)
-        if thost is None or src_host is None:
-            return
-        yield src_host, thost
+        if thost and src_host:
+            yield src_host, thost
 
     def yield_http_header_links(self, url, headers):
         links = []
@@ -453,7 +452,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
                 links.append(m.group(1))
         if links:
             src_host = ExtractHostLinksJob.get_surt_host(url)
-            if src_host is None:
+            if not src_host:
                 return
             for link in links:
                 host = ExtractHostLinksJob.get_surt_host(link)
