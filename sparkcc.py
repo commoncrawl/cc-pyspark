@@ -125,7 +125,7 @@ class CCSparkJob(object):
 
     def validate_arguments(self, args):
         """Validate arguments. Derived classes overriding this method
-           must call super().validate_arguments(parser)."""
+           must call super().validate_arguments(args)."""
         if "orc" == args.output_format and "gzip" == args.output_compression:
             # gzip for Parquet, zlib for ORC
             args.output_compression = "zlib"

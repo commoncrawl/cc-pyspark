@@ -45,9 +45,9 @@ Tested with Spark 2.1.0 – 2.4.6 in combination with Python 2.7 or 3.5, 3.6, 3.
 ## Get Sample Data
 
 To develop locally, you'll need at least three data files – one for each format used in at least one of the examples. They can be fetched from the following links:
-* [warc.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/warc/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.gz)
-* [wat.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wat/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wat.gz)
-* [wet.gz](https://commoncrawl.s3.amazonaws.com/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wet/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wet.gz)
+* [warc.gz](https://data.commoncrawl.org/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/warc/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.gz)
+* [wat.gz](https://data.commoncrawl.org/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wat/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wat.gz)
+* [wet.gz](https://data.commoncrawl.org/crawl-data/CC-MAIN-2017-13/segments/1490218186353.38/wet/CC-MAIN-20170322212946-00000-ip-10-233-31-227.ec2.internal.warc.wet.gz)
 
 Alternatively, running `get-data.sh` downloads the sample data. It also writes input files containing
 * sample input as `file://` URLs
@@ -153,8 +153,8 @@ Example call to count words in 10 WARC records host under the `.is` top-level do
 ```
 $SPARK_HOME/bin/spark-submit \
     --packages org.apache.hadoop:hadoop-aws:3.3.2 \
-    --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider \
     ./cc_index_word_count.py \
+    --input_base_url s3://commoncrawl/ \
     --query "SELECT url, warc_filename, warc_record_offset, warc_record_length, content_charset FROM ccindex WHERE crawl = 'CC-MAIN-2020-24' AND subset = 'warc' AND url_host_tld = 'is' LIMIT 10" \
     s3a://commoncrawl/cc-index/table/cc-main/warc/ \
     myccindexwordcountoutput \
