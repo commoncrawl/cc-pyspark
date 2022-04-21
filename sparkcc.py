@@ -159,7 +159,10 @@ class CCSparkJob(object):
     def get_logger(self, session=None):
         """Get logger from SparkSession or (if None) from logging module"""
         if not session:
-            session = SparkSession.getActiveSession()
+            try:
+                session = SparkSession.getActiveSession()
+            except AttributeError:
+                pass # method available since Spark 3.0.0
         if session:
             return session._jvm.org.apache.log4j.LogManager \
                         .getLogger(self.name)
