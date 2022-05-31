@@ -17,7 +17,7 @@ fi
 
 for data_type in warc wat wet; do
 
-	echo "Downloading Common Crawl paths listings (${data_type^^} files of $CRAWL)..."
+	echo "Downloading Common Crawl paths listings (${data_type} files of $CRAWL)..."
 
 	mkdir -p crawl-data/$CRAWL/
 	listing=crawl-data/$CRAWL/$data_type.paths.gz
@@ -25,7 +25,7 @@ for data_type in warc wat wet; do
 	wget --timestamping $BASE_URL/$listing
 	cd -
 
-	echo "Downloading sample ${data_type^^} file..."
+	echo "Downloading sample ${data_type} file..."
 
 	file=$(gzip -dc $listing | head -1)
 	mkdir -p $(dirname $file)
@@ -40,7 +40,7 @@ for data_type in warc wat wet; do
 	echo file:$PWD/$file >>$input
 
 	input=input/all_${data_type}_${CRAWL}.txt
-	echo "All ${data_type^^} files of ${CRAWL}: $input"
+	echo "All ${data_type} files of ${CRAWL}: $input"
 	gzip -dc $listing >$input
 
 done
