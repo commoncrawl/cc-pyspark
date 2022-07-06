@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 CRAWL=CC-MAIN-2017-13
 
