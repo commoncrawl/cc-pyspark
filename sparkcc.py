@@ -111,6 +111,7 @@ class CCSparkJob(object):
 
         self.add_arguments(arg_parser)
         args = arg_parser.parse_args()
+        self.init_logging(args.log_level)
         if not self.validate_arguments(args):
             raise Exception("Arguments not valid")
 
@@ -142,6 +143,7 @@ class CCSparkJob(object):
         else:
             level = self.log_level
         logging.basicConfig(level=level, format=LOGGING_FORMAT)
+        logging.getLogger(self.name).setLevel(level)
         if session:
             session.sparkContext.setLogLevel(level)
 
