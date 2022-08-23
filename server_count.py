@@ -25,19 +25,23 @@ class ServerCountJob(CCSparkJob):
             try:
                 payload = record['Envelope']['Payload-Metadata']
                 if 'HTTP-Response-Metadata' in payload:
-                    server_name = payload['HTTP-Response-Metadata'] \
-                                         ['Headers'] \
-                                         ['Server'] \
-                                         .strip()
-                    if server_name and server_name != '':
-                        yield server_name, 1
-                    else:
+                    try:
+                        server_name = payload['HTTP-Response-Metadata'] \
+                                             ['Headers'] \
+                                             ['Server'] \
+                                             .strip()
+                        if server_name and server_name != '':
+                            yield server_name, 1
+                        else:
+                            yield ServerCountJob.fallback_server_name, 1
+                    except KeyError:
                         yield ServerCountJob.fallback_server_name, 1
                 else:
                     # WAT request or metadata records
-                    return
+                    pass
             except KeyError:
-                pass
+                self.get_logger().warn("No payload metadata in WAT record for %s",
+                                       record.rec_headers.get_header('WARC-Target-URI'))
 
         elif record.rec_type == 'response':
             # WARC response record
@@ -62,7 +66,7 @@ class ServerCountJob(CCSparkJob):
 
         else:
             # warcinfo, request, non-WAT metadata records
-            return
+            pass
 
 
 if __name__ == "__main__":
