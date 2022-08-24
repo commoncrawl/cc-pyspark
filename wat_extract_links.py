@@ -168,10 +168,10 @@ class ExtractLinksJob(CCSparkJob):
             for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
                 yield url, m.group(1)
 
-    def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
+    def yield_links(self, src_url, base_url, links, url_attr, opt_attr=None):
         # base_url = urlparse(base)
         if not base_url:
-            base_url = from_url
+            base_url = src_url
         has_links = False
         for l in links:
             link = None
@@ -187,11 +187,11 @@ class ExtractLinksJob(CCSparkJob):
             except ValueError:
                 continue
             has_links = True
-            yield from_url, lurl
+            yield src_url, lurl
         if not has_links:
             # ensure that every page is a node in the graph
             # even if it has not outgoing links
-            yield from_url, from_url
+            yield src_url, src_url
 
     def yield_link(self, src, target):
         yield src, target
@@ -314,7 +314,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
     """Extract links from WAT files, redirects from WARC files,
     and sitemap links from robots.txt response records.
     Extract the host names, reverse the names (example.com -> com.example)
-    and save the pairs <from_host, to_host>."""
+    and save the pairs <source_host, target_host>."""
 
     name = "ExtrHostLinks"
     output_schema = StructType([
@@ -394,18 +394,16 @@ class ExtractHostLinksJob(ExtractLinksJob):
         parts.reverse()
         return '.'.join(parts)
 
-    def yield_links(self, from_url, base_url, links, url_attr, opt_attr=None):
-        from_host = ExtractHostLinksJob.get_surt_host(from_url)
-        base_host = None
-        if not from_host:
-            if base_url:
-                base_host = ExtractHostLinksJob.get_surt_host(base_url)
-                if base_host:
-                    from_host = base_host
-                else:
-                    return
-            else:
-                return
+    def yield_links(self, src_url, base_url, links, url_attr, opt_attr=None,
+                    src_host=None, base_host=None):
+        if not src_host:
+            src_host = ExtractHostLinksJob.get_surt_host(src_url)
+        if base_url and not base_host:
+            base_host = ExtractHostLinksJob.get_surt_host(base_url)
+        if base_host and not src_host:
+            src_host = base_host
+        if not src_host:
+            return
         target_hosts = set()
         inner_host_links = 0
         for l in links:
@@ -422,7 +420,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
                     thost = ExtractHostLinksJob.get_surt_host(link)
                     if not thost:
                         pass  # no host, e.g., http:///abc/, file:///C:...
-                    elif thost == from_host:
+                    elif thost == src_host:
                         pass  # global link to same host
                     else:
                         target_hosts.add(thost)
@@ -431,13 +429,11 @@ class ExtractHostLinksJob(ExtractLinksJob):
             else:
                 inner_host_links += 1
         for t in target_hosts:
-            yield from_host, t
+            yield src_host, t
         if inner_host_links > 0 and base_url is not None:
-            if not base_host:
-                base_host = ExtractHostLinksJob.get_surt_host(base_url)
-            if base_host and base_host != from_host:
+            if base_host and base_host != src_host:
                 # any internal link becomes an external link
-                yield from_host, base_host
+                yield src_host, base_host
 
     def yield_link(self, src, target):
         src_host = ExtractHostLinksJob.get_surt_host(src)
@@ -445,7 +441,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
         if thost and src_host:
             yield src_host, thost
 
-    def yield_http_header_links(self, url, headers):
+    def yield_http_header_links(self, url, headers, src_host=None):
         links = []
         if 'Content-Location' in headers:
             links.append(headers['Content-Location'])
@@ -453,13 +449,69 @@ class ExtractHostLinksJob(ExtractLinksJob):
             for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
                 links.append(m.group(1))
         if links:
-            src_host = ExtractHostLinksJob.get_surt_host(url)
             if not src_host:
-                return
+                src_host = ExtractHostLinksJob.get_surt_host(url)
+                if not src_host:
+                    return
             for link in links:
                 host = ExtractHostLinksJob.get_surt_host(link)
                 if host is not None and src_host != host:
                     yield src_host, host
+
+    def get_links(self, url, record):
+        try:
+            response_meta = record['Envelope']['Payload-Metadata']['HTTP-Response-Metadata']
+            src_host = ExtractHostLinksJob.get_surt_host(url)
+            if src_host:
+                if 'Headers' in response_meta:
+                    # extract links from HTTP header
+                    for l in self.yield_http_header_links(url, response_meta['Headers'],
+                                                          src_host=src_host):
+                        yield l
+            if 'HTML-Metadata' not in response_meta:
+                self.records_non_html.add(1)
+                return
+            html_meta = response_meta['HTML-Metadata']
+            base = None
+            base_host = None
+            if 'Head' in html_meta:
+                head = html_meta['Head']
+                if 'Base' in head:
+                    try:
+                        base = urljoin(url, head['Base'])
+                        base_host = ExtractHostLinksJob.get_surt_host(base)
+                    except ValueError:
+                        pass
+                if 'Link' in head:
+                    # <link ...>
+                    for l in self.yield_links(url, base, head['Link'], 'url',
+                                              src_host=src_host, base_host=base_host):
+                        yield l
+                if 'Metas' in head:
+                    for m in head['Metas']:
+                        if (('property' in m and m['property']
+                             in ExtractLinksJob.html_meta_property_links)
+                            or ('name' in m and m['name']
+                                in ExtractLinksJob.html_meta_links)
+                            or ('content' in m
+                                and ExtractLinksJob.url_abs_pattern.match(m['content']))):
+                            for l in self.yield_links(url, base, [m], 'content',
+                                                      src_host=src_host, base_host=base_host):
+                                yield l
+                if 'Scripts' in head:
+                    for l in self.yield_links(url, base, head['Scripts'], 'url',
+                                              src_host=src_host, base_host=base_host):
+                        yield l
+            if 'Links' in html_meta:
+                for l in self.yield_links(url, base, html_meta['Links'],
+                                          'url', 'href',
+                                          src_host=src_host, base_host=base_host):
+                    yield l
+
+        except KeyError as e:
+            self.get_logger().error("Failed to parse record for {}: {}".format(
+                url, e))
+            self.records_failed.add(1)
 
     def process_robotstxt(self, record, stream, _http_status_line):
         """Process robots.txt and yield sitemap links"""
