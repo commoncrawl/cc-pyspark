@@ -1,3 +1,4 @@
+import idna
 import logging
 import os
 
@@ -6,6 +7,7 @@ from pyspark.sql import functions as sqlf
 from pyspark.sql.types import BooleanType, LongType, StringType, StructField, StructType
 
 from iana_tld import iana_tld_list
+from wat_extract_links import ExtractHostLinksJob
 
 
 class HostLinksToGraph(CCSparkJob):
@@ -17,6 +19,9 @@ class HostLinksToGraph(CCSparkJob):
     def add_arguments(self, parser):
         parser.add_argument("--save_as_text", type=str, default=None,
                             help="Save webgraph also as text on path")
+        parser.add_argument("--normalize_host_names", action='store_true',
+                            help="Normalize host names: replace Unicode IDNs"
+                            " by their ASCII equivalents")
         parser.add_argument("--validate_host_names", action='store_true',
                             help="Validate host names and skip vertices with"
                             " invalid name during assignment of vertex IDs")
@@ -42,6 +47,8 @@ class HostLinksToGraph(CCSparkJob):
 
     @staticmethod
     def reverse_host_is_valid(rev_host):
+        if rev_host is None:
+            return False
         if '.' not in rev_host:
             return False
         # fast check for valid top-level domain
@@ -52,6 +59,22 @@ class HostLinksToGraph(CCSparkJob):
             return False
         return True
 
+    @staticmethod
+    def reverse_host_normalize(rev_host):
+        parts = rev_host.split('.')
+        modified = False
+        for (i, part) in enumerate(parts):
+            if not ExtractHostLinksJob.host_part_pattern.match(part):
+                try:
+                    idn = idna.encode(part).decode('ascii')
+                    parts[i] = idn
+                    modified = True
+                except (idna.IDNAError, idna.core.InvalidCodepoint, UnicodeError, IndexError, Exception):
+                    return None
+        if modified:
+            return '.'.join(parts)
+        return rev_host
+
     def vertices_assign_ids(self, session, edges):
         source = edges.select(edges.s.alias('name'))
         target = edges.select(edges.t.alias('name'))
@@ -59,10 +82,16 @@ class HostLinksToGraph(CCSparkJob):
         ids = source.union(target) \
             .distinct()
 
+        if self.args.normalize_host_names:
+            normalize = sqlf.udf(HostLinksToGraph.reverse_host_normalize,
+                                 StringType())
+            ids = ids.withColumn('name', normalize(ids['name']))
+            ids = ids.dropna().distinct()
+
         if self.args.validate_host_names:
             is_valid = sqlf.udf(HostLinksToGraph.reverse_host_is_valid,
                                 BooleanType())
-            ids = ids.filter(is_valid(ids.name))
+            ids = ids.filter(is_valid(ids['name']))
 
         if self.args.vertex_partitions == 1:
             ids = ids \
@@ -104,6 +133,7 @@ class HostLinksToGraph(CCSparkJob):
             for add_input in self.args.add_input:
                 add_edges = session.read.load(add_input)
                 edges = edges.union(add_edges)
+
             # remove duplicates and sort
             edges = edges \
                 .dropDuplicates() \
