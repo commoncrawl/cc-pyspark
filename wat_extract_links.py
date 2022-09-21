@@ -330,20 +330,20 @@ class ExtractHostLinksJob(ExtractLinksJob):
     # - or starting with //
     #   (all other "relative" links are within the same host)
     global_link_pattern = re.compile(r'^(?:[a-z][a-z0-9]{1,5}:)?//',
-                                     re.IGNORECASE)
+                                     re.IGNORECASE|re.ASCII)
 
     # match IP addresses
     # - including IPs with leading `www.' (stripped)
     ip_pattern = re.compile(r'^(?:www\.)?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\Z')
 
-    # valid host names, relaxed allowing underscore, allowing also IDNs
+    # valid host names, relaxed allowing underscore, allowing also IDNAs
     # https://en.wikipedia.org/wiki/Hostname#Restrictions_on_valid_hostnames
     host_part_pattern = re.compile(r'^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?\Z',
-                                   re.IGNORECASE)
+                                   re.IGNORECASE|re.ASCII)
 
     # simple pattern to match many but not all host names in URLs
     url_parse_host_pattern = re.compile(r'^https?://([a-z0-9_.-]{2,253})(?:[/?#]|\Z)',
-                                        re.IGNORECASE)
+                                        re.IGNORECASE|re.ASCII)
 
     @staticmethod
     def get_surt_host(url):
@@ -380,10 +380,12 @@ class ExtractHostLinksJob(ExtractLinksJob):
             if not ExtractHostLinksJob.host_part_pattern.match(part):
                 try:
                     idn = idna.encode(part).decode('ascii')
-                except (idna.IDNAError, UnicodeError, IndexError, Exception):
+                except (idna.IDNAError, idna.core.InvalidCodepoint, UnicodeError, IndexError, Exception):
                     # self.get_logger().debug("Invalid host name: {}".format(url))
                     return None
 
+                # TODO: idna verifies the resulting string for length restrictions or invalid chars,
+                #       maybe no further verification is required:
                 if ExtractHostLinksJob.host_part_pattern.match(idn):
                     parts[i] = idn
                 else:
