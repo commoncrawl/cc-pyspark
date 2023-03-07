@@ -84,7 +84,7 @@ class ExtractLinksJob(CCSparkJob):
         link_count = 0
         if self.is_wat_json_record(record):
             try:
-                wat_record = json.loads(record.content_stream().read())
+                wat_record = json.loads(self.get_payload_stream(record).read())
             except ValueError as e:
                 self.get_logger().error('Failed to load JSON: {}'.format(e))
                 self.records_failed.add(1)
@@ -99,10 +99,10 @@ class ExtractLinksJob(CCSparkJob):
             for link in self.get_links(url, wat_record):
                 link_count += 1
                 yield link
-        elif record.rec_type == 'response':
+        elif self.is_response_record(record):
             self.records_response.add(1)
             self.records_response_warc.add(1)
-            stream = record.content_stream()
+            stream = self.get_payload_stream(record)
             http_status_line = stream.readline()
             if (self.processing_robotstxt_warc and ExtractLinksJob
                     .http_success_pattern.match(http_status_line)):
@@ -122,7 +122,7 @@ class ExtractLinksJob(CCSparkJob):
         if link_count == 0:
             # ensure that the URL itself is a node in the graph
             # (every visited URL should be a node)
-            uri = record.rec_headers.get_header('WARC-Target-URI')
+            uri = self.get_warc_header(record, 'WARC-Target-URI')
             for link in self.yield_link(uri, uri):
                 link_count += 1
                 yield link
@@ -143,7 +143,7 @@ class ExtractLinksJob(CCSparkJob):
                         'URL with unknown encoding: {} - {}'.format(
                             redir_to, e))
                     return
-                redir_from = record.rec_headers.get_header('WARC-Target-URI')
+                redir_from = self.get_warc_header(record, 'WARC-Target-URI')
                 for link in self.yield_link(redir_from, redir_to):
                     yield link
                 return
