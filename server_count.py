@@ -21,7 +21,7 @@ class ServerCountJob(CCSparkJob):
 
         if self.is_wat_json_record(record):
             # WAT (response) record
-            record = json.loads(record.content_stream().read())
+            record = json.loads(self.get_payload_stream(record).read())
             try:
                 payload = record['Envelope']['Payload-Metadata']
                 if 'HTTP-Response-Metadata' in payload:
@@ -41,19 +41,19 @@ class ServerCountJob(CCSparkJob):
                     pass
             except KeyError:
                 self.get_logger().warn("No payload metadata in WAT record for %s",
-                                       record.rec_headers.get_header('WARC-Target-URI'))
+                                       self.get_warc_header(record, 'WARC-Target-URI'))
 
-        elif record.rec_type == 'response':
+        elif self.is_response_record(record):
             # WARC response record
             server_names = set()
-            for (name, value) in record.http_headers.headers:
+            for (name, value) in self.get_http_headers(record):
                 if name.lower() == 'server':
                     if value == '':
                         pass
                     elif value in server_names:
                         self.get_logger().debug(
                             "Not counting duplicated 'Server' header value for %s: %s",
-                            record.rec_headers.get_header('WARC-Target-URI'), value)
+                            self.get_warc_header(record, 'WARC-Target-URI'))
                     else:
                         yield value, 1
                         server_names.add(value)
@@ -62,7 +62,7 @@ class ServerCountJob(CCSparkJob):
             elif len(server_names) > 1:
                 self.get_logger().info(
                     "Multiple 'Server' header values for %s: %s",
-                    record.rec_headers.get_header('WARC-Target-URI'), server_names)
+                    self.get_warc_header(record, 'WARC-Target-URI'), server_names)
 
         else:
             # warcinfo, request, non-WAT metadata records

@@ -1,5 +1,5 @@
 from fastwarc.warc import ArchiveIterator as FastWarcArchiveIterator
-from fastwarc.warc import WarcRecordType
+from fastwarc.warc import WarcRecordType, WarcRecord
 from fastwarc.stream_io import FastWARCError
 
 from sparkcc import CCSparkJob
@@ -26,7 +26,7 @@ class CCFastWarcSparkJob(CCSparkJob):
             self.get_logger().error(
                 'Invalid WARC: {} - {}'.format(uri, exception))
 
-    def iterate_records(self, _warc_uri, archive_iterator):
+    def iterate_records(self, _warc_uri, archive_iterator: FastWarcArchiveIterator):
         """Iterate over all WARC records. This method can be customized
            and allows to access also values from ArchiveIterator, namely
            WARC record offset and length."""
@@ -38,19 +38,36 @@ class CCFastWarcSparkJob(CCSparkJob):
             # cf. fastwarc/cli.py index
 
     @staticmethod
-    def is_wet_text_record(record):
+    def get_payload_stream(record: WarcRecord):
+        return record.reader
+
+    @staticmethod
+    def get_warc_header(record: WarcRecord, header: str):
+        return record.headers[header]
+
+    @staticmethod
+    def get_http_headers(record: WarcRecord):
+        return record.http_headers.astuples()
+
+    @staticmethod
+    def is_response_record(record: WarcRecord):
+        """Return true if WARC record is a WARC response record"""
+        return record.record_type == WarcRecordType.response
+
+    @staticmethod
+    def is_wet_text_record(record: WarcRecord):
         """Return true if WARC record is a WET text/plain record"""
         return (record.record_type == WarcRecordType.conversion and
                 record.headers.get('Content-Type') == 'text/plain')
 
     @staticmethod
-    def is_wat_json_record(record):
+    def is_wat_json_record(record: WarcRecord):
         """Return true if WARC record is a WAT record"""
         return (record.record_type == WarcRecordType.metadata and
                 record.headers.get('Content-Type') == 'application/json')
 
     @staticmethod
-    def is_html(record):
+    def is_html(record: WarcRecord):
         """Return true if (detected) MIME type of a record is HTML"""
         html_types = ['text/html', 'application/xhtml+xml']
         if (('WARC-Identified-Payload-Type' in record.headers) and

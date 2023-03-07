@@ -17,4 +17,4 @@ lxml
 # to parse WARC/WAT/WET files using FastWARC (https://pypi.org/project/FastWARC/)
 #fastwarc
 # (tested with)
-#fastwarc==0.12.2
+#fastwarc==0.14.1
