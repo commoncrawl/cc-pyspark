@@ -11,11 +11,11 @@ import boto3
 import botocore
 import requests
 
-from warcio.archiveiterator import ArchiveIterator
-from warcio.recordloader import ArchiveLoadFailed
-
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType
+
+from warcio.archiveiterator import ArchiveIterator
+from warcio.recordloader import ArchiveLoadFailed, ArcWarcRecord
 
 
 LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
@@ -24,6 +24,7 @@ LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 class CCSparkJob(object):
     """
     A simple Spark job definition to process Common Crawl data
+    (WARC/WAT/WET files using Spark and warcio)
     """
 
     name = 'CCSparkJob'
@@ -89,7 +90,7 @@ class CCSparkJob(object):
                                 " orc, json, csv")
         arg_parser.add_argument("--output_compression", default="gzip",
                                 help="Output compression codec: None,"
-                                " gzip/zlib (default), snappy, lzo, etc.")
+                                " gzip/zlib (default), zstd, snappy, lzo, etc.")
         arg_parser.add_argument("--output_option", action='append', default=[],
                                 help="Additional output option pair"
                                 " to set (format-specific) output options, e.g.,"
@@ -146,7 +147,6 @@ class CCSparkJob(object):
         logging.getLogger(self.name).setLevel(level)
         if session:
             session.sparkContext.setLogLevel(level)
-
 
     def init_accumulators(self, session):
         """Register and initialize counters (aka. accumulators).
@@ -348,18 +348,23 @@ class CCSparkJob(object):
             if not stream:
                 continue
 
-            no_parse = (not self.warc_parse_http_header)
-            try:
-                archive_iterator = ArchiveIterator(stream,
-                                                   no_record_parse=no_parse, arc2warc=True)
-                for res in self.iterate_records(uri, archive_iterator):
-                    yield res
-            except ArchiveLoadFailed as exception:
-                self.warc_input_failed.add(1)
-                self.get_logger().error(
-                    'Invalid WARC: {} - {}'.format(uri, exception))
-            finally:
-                stream.close()
+            for res in self.process_warc(uri, stream):
+                yield res
+
+            stream.close()
+
+    def process_warc(self, uri, stream):
+        """Parse a WARC (or WAT/WET file) using warcio,
+        call iterate_records() to process the WARC records"""
+        try:
+            rec_iter = ArchiveIterator(stream,
+                                       no_record_parse=(not self.warc_parse_http_header),
+                                       arc2warc=True)
+            for res in self.iterate_records(uri, rec_iter):
+                yield res
+        except ArchiveLoadFailed as exception:
+            self.warc_input_failed.add(1)
+            self.get_logger().error('Invalid WARC: {} - {}'.format(uri, exception))
 
     def process_record(self, record):
         """Process a single WARC/WAT/WET record"""
@@ -380,19 +385,36 @@ class CCSparkJob(object):
             #  warc_record_length = archive_iterator.get_record_length()
 
     @staticmethod
-    def is_wet_text_record(record):
+    def get_payload_stream(record: ArcWarcRecord):
+        return record.content_stream()
+
+    @staticmethod
+    def get_warc_header(record: ArcWarcRecord, header: str, default: str=None):
+        return record.rec_headers.get_header(header, default)
+
+    @staticmethod
+    def get_http_headers(record: ArcWarcRecord):
+        return record.http_headers.headers
+
+    @staticmethod
+    def is_response_record(record: ArcWarcRecord):
+        """Return true if WARC record is a WARC response record"""
+        return record.rec_type == 'response'
+
+    @staticmethod
+    def is_wet_text_record(record: ArcWarcRecord):
         """Return true if WARC record is a WET text/plain record"""
         return (record.rec_type == 'conversion' and
                 record.content_type == 'text/plain')
 
     @staticmethod
-    def is_wat_json_record(record):
+    def is_wat_json_record(record: ArcWarcRecord):
         """Return true if WARC record is a WAT record"""
         return (record.rec_type == 'metadata' and
                 record.content_type == 'application/json')
 
     @staticmethod
-    def is_html(record):
+    def is_html(record: ArcWarcRecord):
         """Return true if (detected) MIME type of a record is HTML"""
         html_types = ['text/html', 'application/xhtml+xml']
         if (('WARC-Identified-Payload-Type' in record.rec_headers) and

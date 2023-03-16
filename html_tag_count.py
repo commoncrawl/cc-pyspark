@@ -14,13 +14,13 @@ class TagCountJob(CCSparkJob):
     html_tag_pattern = re.compile(b'<([a-z0-9]+)')
 
     def process_record(self, record):
-        if record.rec_type != 'response':
+        if not self.is_response_record(record):
             # skip over WARC request or metadata records
             return
         if not self.is_html(record):
             # skip non-HTML or unknown content types
             return
-        data = record.content_stream().read()
+        data = self.get_payload_stream(record).read()
         counts = Counter(TagCountJob.html_tag_pattern.findall(data))
         for tag, count in counts.items():
             yield tag.decode('ascii').lower(), count
