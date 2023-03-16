@@ -42,8 +42,8 @@ class CCFastWarcSparkJob(CCSparkJob):
         return record.reader
 
     @staticmethod
-    def get_warc_header(record: WarcRecord, header: str):
-        return record.headers[header]
+    def get_warc_header(record: WarcRecord, header: str, default: str=None):
+        return record.headers.get(header, default)
 
     @staticmethod
     def get_http_headers(record: WarcRecord):

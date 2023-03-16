@@ -29,7 +29,7 @@ class ServerIPAddressJob(CCSparkJob):
 
         if self.is_wat_json_record(record):
             # WAT (response) record
-            record = json.loads(record.content_stream().read())
+            record = json.loads(self.get_payload_stream(record).read())
             try:
                 warc_header = record['Envelope']['WARC-Header-Metadata']
                 if warc_header['WARC-Type'] != 'response':
@@ -43,10 +43,10 @@ class ServerIPAddressJob(CCSparkJob):
                     return
             except KeyError:
                 pass
-        elif record.rec_type == 'response':
+        elif self.is_response_record(record):
             # WARC response record
-            ip_address = record.rec_headers.get_header('WARC-IP-Address')
-            url = record.rec_headers.get_header('WARC-Target-URI')
+            ip_address = self.get_warc_header(record, 'WARC-IP-Address')
+            url = self.get_warc_header(record, 'WARC-Target-URI')
         else:
             # warcinfo, request, non-WAT metadata records
             return

@@ -90,7 +90,7 @@ class CCSparkJob(object):
                                 " orc, json, csv")
         arg_parser.add_argument("--output_compression", default="gzip",
                                 help="Output compression codec: None,"
-                                " gzip/zlib (default), snappy, lzo, etc.")
+                                " gzip/zlib (default), zstd, snappy, lzo, etc.")
         arg_parser.add_argument("--output_option", action='append', default=[],
                                 help="Additional output option pair"
                                 " to set (format-specific) output options, e.g.,"
@@ -389,8 +389,8 @@ class CCSparkJob(object):
         return record.content_stream()
 
     @staticmethod
-    def get_warc_header(record: ArcWarcRecord, header: str):
-        return record.rec_headers.get_header(header)
+    def get_warc_header(record: ArcWarcRecord, header: str, default: str=None):
+        return record.rec_headers.get_header(header, default)
 
     @staticmethod
     def get_http_headers(record: ArcWarcRecord):
