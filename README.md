@@ -24,7 +24,7 @@ Further information about the examples and available options is shown via the [c
 
 ## Implementing a Custom Extractor
 
-Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases it's sufficient to override a single method (`process_record`). Have a look at one of the examples, eg. to [count HTML tags](./html_tag_count.py).
+Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases it is sufficient to override a single method (`process_record`). Have a look at one of the examples, e.g. to [count HTML tags](./html_tag_count.py).
 
 ## Setup
 
@@ -90,6 +90,8 @@ Row(key=u'GSE', val=886)
 Row(key=u'Apache/2.2.15 (CentOS)', val=827)
 Row(key=u'Apache-Coyote/1.1', val=790)
 ```
+
+But it's also possible to configure a different output format, for example CSV or JSON, see the command-line options.
 
 See also
 * [running the Spark shell and submitting Spark jobs](https://spark.apache.org/docs/latest/#running-the-examples-and-shell)
@@ -175,16 +177,29 @@ Alternatively, it's possible configure the table schema explicitly:
 - download the [latest table schema as JSON](https://github.com/commoncrawl/cc-index-table/blob/master/src/main/resources/schema/cc-index-schema-flat.json)
 - and use it by adding the command-line argument `--table_schema cc-index-schema-flat.json`.
 
+### Using FastWARC to parse WARC files
+
+> [FastWARC](https://resiliparse.chatnoir.eu/en/latest/man/fastwarc.html) is a high-performance WARC parsing library for Python written in C++/Cython. The API is inspired in large parts by WARCIO, but does not aim at being a drop-in replacement.
+
+Replacing [FastWARC](https://resiliparse.chatnoir.eu/en/latest/man/fastwarc.html) can speed up job execution by 25% if little custom computations are done and most of the time is spent for parsing WARC files.
+
+To use FastWARC
+- the job class must inherit from [CCFastWarcSparkJob](./sparkcc_fastwarc.py) instead of [CCSparkJob](./sparkcc.py). See [ServerCountFastWarcJob](./server_count_fastwarc.py) for an example.
+- when running the job in a Spark cluster, `sparkcc_fastwarc.py` must be passed via `--py-files` in addition to `sparkcc.py` and further job-specific Python files. See also [running in a Spark cluster](#running-in-spark-cluster-over-large-amounts-of-data).
+
+Some differences between the warcio and FastWARC APIs are hidden from the user in methods implemented in [CCSparkJob](./sparkcc.py) and [CCFastWarcSparkJob](./sparkcc_fastwarc.py) respectively. These methods allow to access WARC or HTTP headers and the payload stream in a unique way, regardless of whether warcio or FastWARC are used.
+
+However, it's recommended that you carefully verify that your custom job implementation works in combination with FastWARC. There are subtle differences between the warcio and FastWARC APIs, including the underlying classes (WARC/HTTP headers and stream implementations). In addition, FastWARC does not support for legacy ARC files and does not automatically decode HTTP content and transfer encodings (see [Resiliparse HTTP Tools](https://resiliparse.chatnoir.eu/en/latest/man/parse/http.html#read-chunked-http-payloads)). While content and transfer encodings are already decoded in Common Crawl WARC files, this may not be the case for WARC files from other sources. See also [WARC 1.1 specification, http/https response records](https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#http-and-https-schemes).
 
 ## Credits
 
 Examples are originally ported from Stephen Merity's [cc-mrjob](https://github.com/commoncrawl/cc-mrjob/) with the following changes and upgrades:
 * based on Apache Spark (instead of [mrjob](https://mrjob.readthedocs.io/))
 * [boto3](https://boto3.readthedocs.io/) supporting multi-part download of data from S3
-* [warcio](https://github.com/webrecorder/warcio) a Python 2 and Python 3 compatible module to access WARC files
+* [warcio](https://github.com/webrecorder/warcio) a Python 2 and Python 3 compatible module for accessing WARC files
 
 Further inspirations are taken from
-* [cosr-back](https://github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://web.archive.org/web/20171117073653/https://about.commonsearch.org/). You definitely should have a look at it if you need a more sophisticated WARC processor (including a HTML parser for example).
+* [cosr-back](https://github.com/commonsearch/cosr-back) written by Sylvain Zimmer for [Common Search](https://web.archive.org/web/20171117073653/https://about.commonsearch.org/). You should definitely take a look at it if you need a more sophisticated WARC processor (including an HTML parser for example).
 * Mark Litwintschik's blog post [Analysing Petabytes of Websites](https://tech.marksblogg.com/petabytes-of-website-data-spark-emr.html)
 
 
