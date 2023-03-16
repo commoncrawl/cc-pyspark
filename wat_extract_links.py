@@ -4,12 +4,7 @@ import re
 
 import ujson as json
 
-try:
-    # Python2
-    from urlparse import urljoin, urlparse
-except ImportError:
-    # Python3
-    from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType
 
