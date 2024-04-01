@@ -14,7 +14,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
 + [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
 
-+ work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](https://github.com/commoncrawl/cc-index-table) and notes about [schema merging](#columnar-index-and-schema-merging)):
++ work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](https://github.com/commoncrawl/cc-index-table) and the notes about [querying the columnar index](#querying-the-columnar-index)):
 
   - run a SQL query and [export the result as a table](./cc_index_export.py)
 
@@ -39,7 +39,7 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with with Spark 3.2.3 and 3.3.2 in combination with Python 3.8, 3.9 and 3.10. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
+Tested with with Spark 3.2.3, 3.3.2 and 3.4.1 in combination with Python 3.8, 3.9 and 3.10. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
 
 
 ## Get Sample Data
@@ -51,8 +51,7 @@ To develop locally, you'll need at least three data files – one for each forma
 
 Alternatively, running `get-data.sh` downloads the sample data. It also writes input files containing
 * sample input as `file://` URLs
-* all input of one monthly crawl as relative paths
-  - to use with `--input_base_url s3://commoncrawl/` resp. `--input_base_url https://data.commoncrawl.org/`
+* all input of one monthly crawl as paths relative to the data bucket base URL `s3://commoncrawl/` resp. `https://data.commoncrawl.org/` – see [authenticated S3 access or access via HTTP](#authenticated-s3-access-or-access-via-http) for more information.
 
 Note that the sample data is from an older crawl (`CC-MAIN-2017-13` run in March 2017). If you want to use more recent data, please visit the [Common Crawl site](https://commoncrawl.org/the-data/get-started/).
 
@@ -138,10 +137,26 @@ Since April 2022 there are two ways to access of Common Crawl data:
 - using HTTP/HTTPS and the base URL `https://data.commoncrawl.org/` or `https://ds5q9oxwqwsfj.cloudfront.net/`
 - using the S3 API to read the bucket `s3://commoncrawl/` requires authentication and makes an Amazon Web Services account mandatory.
 
-This project cc-pyspark uses [boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) to access WARC, WAT or WET files on `s3://commoncrawl/`. The best way is to ensure that a S3 read-only IAM policy is attached to the the IAM role of the EC2 instances where Common Crawl data is processed, see the [IAM user guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html). If this is no option (or if the processing is not running on AWS), there are various [options to configure credentials in boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
+The S3 API is strongly recommended as the most performant access scheme, if the data is processed in the AWS cloud and in the AWS `us-east-1` region. In contrary, if reading the data from outside the AWS cloud, HTTP/HTTPS access is the preferred option.
+
+Dependent on the chosen access scheme, the data bucket's base URL needs to be passed using the command-line option `--input_base_url`:
+- `--input_base_url https://data.commoncrawl.org/` when using HTTP/HTTPS
+- `--input_base_url s3://commoncrawl/` when using the S3 API.
+
+This project uses [boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) to access WARC, WAT or WET files on `s3://commoncrawl/` over the S3 API. The best way is to ensure that a S3 read-only IAM policy is attached to the the IAM role of the EC2 instances where Common Crawl data is processed, see the [IAM user guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html). If this is no option (or if the processing is not running on AWS), there are various other [options to configure credentials in boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
+
+Please also note that [querying the columnar index requires S3 access](#supported-access-schemes-for-the-columnar-index).
 
 
-### Installation of S3 Support Libraries
+### Querying the columnar index
+
+The example tools to query the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) may require additional configuration and setup steps.
+
+#### Supported access schemes for the columnar index
+
+Querying the columnar index using cc-pyspark requires authenticated S3 access. There is no support for HTTP/HTTPS access. Please see here for more information about [supported data access schemes](#authenticated-s3-access-or-access-via-http).
+
+#### Installation of S3 Support Libraries
 
 While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages org.apache.hadoop:hadoop-aws:3.2.1` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management) - the hadoop-aws package and transitive dependencies are downloaded as Maven dependencies. Note that the required version of hadoop-aws package depends on the Hadoop version bundled with your Spark installation, e.g., Spark 3.2.1 bundled with Hadoop 3.2 ([spark-3.2.1-bin-hadoop3.2.tgz](https://archive.apache.org/dist/spark/spark-3.2.1/spark-3.2.1-bin-hadoop3.2.tgz)).
 
@@ -151,7 +166,7 @@ Please also note that:
   [Authorizing access to EMRFS data in Amazon S3](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-plan-credentialsprovider.html)
   or [Hadoop-AWS: Authenticating with S3](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Authenticating_with_S3).
 
-Example call to count words in 10 WARC records host under the `.is` top-level domain:
+Below an example call to count words in 10 WARC records host under the `.is` top-level domain using the `--packages` option:
 ```
 $SPARK_HOME/bin/spark-submit \
     --packages org.apache.hadoop:hadoop-aws:3.3.2 \
@@ -164,7 +179,7 @@ $SPARK_HOME/bin/spark-submit \
     --output_format json
 ```
 
-### Columnar index and schema merging
+#### Columnar index and schema merging
 
 The schema of the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) has been extended over time by adding new columns. If you want to query one of the new columns (e.g., `content_languages`), the following [Spark configuration option](#overwriting-spark-configuration-properties) needs to be set:
 ```
@@ -176,6 +191,7 @@ However, this option impacts the query performance, so use with care! Please als
 Alternatively, it's possible configure the table schema explicitly:
 - download the [latest table schema as JSON](https://github.com/commoncrawl/cc-index-table/blob/master/src/main/resources/schema/cc-index-schema-flat.json)
 - and use it by adding the command-line argument `--table_schema cc-index-schema-flat.json`.
+
 
 ### Using FastWARC to parse WARC files
 
