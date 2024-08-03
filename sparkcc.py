@@ -5,7 +5,7 @@ import os
 import re
 
 from io import BytesIO
-from tempfile import SpooledTemporaryFile, TemporaryFile
+from tempfile import SpooledTemporaryFile, TemporaryFile, NamedTemporaryFile
 
 import boto3
 import botocore
@@ -620,3 +620,120 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .saveAsTable(self.args.output)
 
         self.log_accumulators(session)
+
+
+class CCFileProcessorSparkJob(CCSparkJob):
+    """
+    A Spark job definition to process entire files from a manifest.
+    (as opposed to processing individual WARC records)
+    """
+
+    name = 'CCFileProcessor'
+
+    def run_job(self, session):
+        input_data = session.sparkContext.textFile(self.args.input,
+                                                   minPartitions=self.args.num_input_partitions)
+
+        output = input_data.mapPartitionsWithIndex(self.process_files) \
+            .reduceByKey(self.reduce_by_key_func)
+
+        session.createDataFrame(output, schema=self.output_schema) \
+            .coalesce(self.args.num_output_partitions) \
+            .write \
+            .format(self.args.output_format) \
+            .option("compression", self.args.output_compression) \
+            .options(**self.get_output_options()) \
+            .saveAsTable(self.args.output)
+
+        self.log_accumulators(session)
+
+    def fetch_file(self, uri, base_uri=None):
+        """
+        Fetch file. This is a modified version of fetch_warc:
+        It does not currently support hdfs, but that could be added if needed.
+        Use NamedTemporaryFile so we can support external tools that require a file path.
+        """
+
+        (scheme, netloc, path) = (None, None, None)
+        uri_match = self.data_url_pattern.match(uri)
+        if not uri_match and base_uri:
+            # relative input URI (path) and base URI defined
+            uri = base_uri + uri
+            uri_match = self.data_url_pattern.match(uri)
+
+        if uri_match:
+            (scheme, netloc, path) = uri_match.groups()
+        else:
+            # keep local file paths as is
+            path = uri
+
+        warctemp = None
+
+        if scheme == 's3':
+            bucketname = netloc
+            if not bucketname:
+                self.get_logger().error("Invalid S3 URI: " + uri)
+                return
+            if not path:
+                self.get_logger().error("Empty S3 path: " + uri)
+                return
+            elif path[0] == '/':
+                # must strip leading / in S3 path
+                path = path[1:]
+            self.get_logger().info('Reading from S3 {}'.format(uri))
+            # download entire file using a temporary file for buffering
+            warctemp = NamedTemporaryFile(mode='w+b', dir=self.args.local_temp_dir)
+            try:
+                self.get_s3_client().download_fileobj(bucketname, path, warctemp)
+                warctemp.flush()
+                warctemp.seek(0)
+            except botocore.client.ClientError as exception:
+                self.get_logger().error(
+                    'Failed to download {}: {}'.format(uri, exception))
+                self.warc_input_failed.add(1)
+                warctemp.close()
+
+        elif scheme == 'http' or scheme == 'https':
+            headers = None
+            self.get_logger().info('Fetching {}'.format(uri))
+            response = requests.get(uri, headers=headers)
+
+            if response.ok:
+                # includes "HTTP 206 Partial Content" for range requests
+                warctemp = NamedTemporaryFile(  mode='w+b',
+                                                dir=self.args.local_temp_dir)
+                warctemp.write(response.content)
+                warctemp.flush()
+                warctemp.seek(0)
+            else:
+                self.get_logger().error(
+                    'Failed to download {}: {}'.format(uri, response.status_code))
+        else:
+            self.get_logger().info('Reading local file {}'.format(uri))
+            if scheme == 'file':
+                # must be an absolute path
+                uri = os.path.join('/', path)
+            else:
+                base_dir = os.path.abspath(os.path.dirname(__file__))
+                uri = os.path.join(base_dir, uri)
+            warctemp = open(uri, 'rb')
+
+        return warctemp
+    
+    def process_files(self, _id, iterator):
+        """Process files, calling process_file(...) for each file"""
+        for uri in iterator:
+            self.warc_input_processed.add(1)
+
+            tempfd = self.fetch_file(uri, self.args.input_base_url)
+            if not tempfd:
+                continue
+
+            for res in self.process_file(uri, tempfd):
+                yield res
+            
+            tempfd.close()
+
+    def process_file(self, uri, tempfd):
+        """Process a single file"""
+        raise NotImplementedError('Processing file needs to be customized')
