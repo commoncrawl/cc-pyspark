@@ -698,7 +698,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
                     'Failed to download {}: {}'.format(uri, exception))
                 self.warc_input_failed.add(1)
                 warctemp.close()
-
+                return
         elif scheme == 'http' or scheme == 'https':
             headers = None
             self.get_logger().info('Fetching {}'.format(uri))
@@ -714,6 +714,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
             else:
                 self.get_logger().error(
                     'Failed to download {}: {}'.format(uri, response.status_code))
+                return
         else:
             self.get_logger().info('Reading local file {}'.format(uri))
             if scheme == 'file':
