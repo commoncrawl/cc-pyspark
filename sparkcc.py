@@ -804,6 +804,8 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 self.get_s3_client().head_object(Bucket=bucketname, Key=path)
                 return True
             except botocore.client.ClientError as exception:
+                if exception.response['Error']['Code'] == '404':
+                    return False
                 self.get_logger().error(
                     'Failed to check if file exists on S3 {}: {}'.format(uri, exception))
                 return False
