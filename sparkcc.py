@@ -56,7 +56,7 @@ class CCSparkJob(object):
     s3client = None
 
     # pattern to split a data URL (<scheme>://<netloc>/<path> or <scheme>:/<path>)
-    data_url_pattern = re.compile('^(s3|https?|file|hdfs):(?://([^/]*))?/(.*)')
+    data_url_pattern = re.compile('^(s3|https?|file|hdfs|s3a|s3n):(?://([^/]*))?/(.*)')
 
 
     def parse_arguments(self):
@@ -248,7 +248,7 @@ class CCSparkJob(object):
 
         stream = None
 
-        if scheme == 's3':
+        if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
             if not bucketname:
                 self.get_logger().error("Invalid S3 URI: " + uri)
@@ -632,7 +632,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
     name = 'CCFileProcessor'
 
     def add_arguments(self, parser):
-        super(CCIndexWarcSparkJob, self).add_arguments(parser)
+        super(CCSparkJob, self).add_arguments(parser)
         parser.add_argument("--output_base_uri", required=False,
                             default='./output',
                             help="Base URI to write output files to. Useful if your job uses write_output_file or check_for_output_file.")
@@ -676,7 +676,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
 
         warctemp = None
 
-        if scheme == 's3':
+        if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
             if not bucketname:
                 self.get_logger().error("Invalid S3 URI: " + uri)
@@ -758,7 +758,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
         uri_match = self.data_url_pattern.match(uri)
         if uri_match:
             (scheme, netloc, path) = uri_match.groups()
-        if scheme == 's3':
+        if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
             if not bucketname:
                 self.get_logger().error("Invalid S3 URI: " + uri)
@@ -789,7 +789,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
         else:
             # keep local file paths as is
             path = uri
-        if scheme == 's3':
+        if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
             if not bucketname:
                 self.get_logger().error("Invalid S3 URI: " + uri)
@@ -845,7 +845,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
         else:
             # keep local file paths as is
             path = uri
-        if scheme == 's3':
+        if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
             if not bucketname:
                 self.get_logger().error("Invalid S3 URI: " + uri)
