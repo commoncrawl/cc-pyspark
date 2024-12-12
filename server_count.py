@@ -26,12 +26,19 @@ class ServerCountJob(CCSparkJob):
                 payload = record['Envelope']['Payload-Metadata']
                 if 'HTTP-Response-Metadata' in payload:
                     try:
-                        server_name = payload['HTTP-Response-Metadata'] \
-                                             ['Headers'] \
-                                             ['Server'] \
-                                             .strip()
-                        if server_name and server_name != '':
-                            yield server_name, 1
+                        server_names = []
+                        headers = payload['HTTP-Response-Metadata']['Headers']
+                        for header in headers:
+                             if header.lower() == 'server':
+                                 if isinstance(headers[header], list):
+                                     for server_name in headers[header]:
+                                         server_names.append(server_name.strip())
+                                 else:
+                                     server_names.append(headers[header].strip())
+                        if server_names:
+                            for server_name in server_names:
+                                if server_name != '':
+                                    yield server_name, 1
                         else:
                             yield ServerCountJob.fallback_server_name, 1
                     except KeyError:
