@@ -156,12 +156,30 @@ class ExtractLinksJob(CCSparkJob):
         if src != target:
             yield src, target
 
+    def extract_http_header_links(self, url, headers):
+        """Extract links from WAT HTTP response headers"""
+        links = []
+        for header in headers:
+            header_name = header.lower()
+            if header_name == 'content-location':
+                if isinstance(headers[header], list):
+                    for cl in headers[header]:
+                        links.append(cl)
+                    else:
+                        links.append(headers[header])
+            elif header_name == 'link':
+                if isinstance(headers[header], list):
+                    for li in headers[header]:
+                        for m in ExtractLinksJob.http_link_pattern.finditer(li):
+                            links.append(m.group(1))
+                else:
+                    for m in ExtractLinksJob.http_link_pattern.finditer(headers[header]):
+                        links.append(m.group(1))
+        return links
+
     def yield_http_header_links(self, url, headers):
-        if 'Content-Location' in headers:
-            yield url, headers['Content-Location']
-        if 'Link' in headers:
-            for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
-                yield url, m.group(1)
+        for l in self.extract_http_header_links(url, headers):
+            yield url, l
 
     def yield_links(self, src_url, base_url, links, url_attr, opt_attr=None):
         # base_url = urlparse(base)
@@ -437,12 +455,7 @@ class ExtractHostLinksJob(ExtractLinksJob):
             yield src_host, thost
 
     def yield_http_header_links(self, url, headers, src_host=None):
-        links = []
-        if 'Content-Location' in headers:
-            links.append(headers['Content-Location'])
-        if 'Link' in headers:
-            for m in ExtractLinksJob.http_link_pattern.finditer(headers['Link']):
-                links.append(m.group(1))
+        links = self.extract_http_header_links(url, headers)
         if links:
             if not src_host:
                 src_host = ExtractHostLinksJob.get_surt_host(url)
