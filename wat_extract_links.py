@@ -165,8 +165,8 @@ class ExtractLinksJob(CCSparkJob):
                 if isinstance(headers[header], list):
                     for cl in headers[header]:
                         links.append(cl)
-                    else:
-                        links.append(headers[header])
+                else:
+                    links.append(headers[header])
             elif header_name == 'link':
                 if isinstance(headers[header], list):
                     for li in headers[header]:
