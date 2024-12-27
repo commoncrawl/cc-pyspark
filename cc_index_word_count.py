@@ -36,23 +36,6 @@ class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
         # sum values of tuple <term_frequency, document_frequency>
         return ((a[0] + b[0]), (a[1] + b[1]))
 
-    def html_to_text(self, page, record):
-        try:
-            encoding = self.get_warc_header(record, 'WARC-Identified-Content-Charset')
-            if not encoding:
-                for encoding in EncodingDetector(page, is_html=True).encodings:
-                    # take the first detected encoding
-                    break
-            soup = BeautifulSoup(page, 'lxml', from_encoding=encoding)
-            for script in soup(['script', 'style']):
-                script.extract()
-            return soup.get_text(' ', strip=True)
-        except Exception as e:
-            self.get_logger().error("Error converting HTML to text for {}: {}",
-                                    self.get_warc_header(record, 'WARC-Target-URI'), e)
-            self.records_parsing_failed.add(1)
-            return ''
-
     def process_record(self, record):
         if not self.is_response_record(record):
             # skip over WARC request or metadata records
@@ -60,8 +43,18 @@ class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
         if not self.is_html(record):
             self.records_non_html.add(1)
             return
-        page = self.get_payload_stream(record).read()
-        text = self.html_to_text(page, record)
+
+        text = ""
+        try:
+            page = self.get_payload_stream(record).read()
+            encoding = self.get_warc_header(record, 'WARC-Identified-Content-Charset')
+            parser = self.get_html_parser()
+            html_tree = parser.get_html_tree(page, encoding=encoding)
+            text = parser.html_to_text(html_tree)
+        except Exception as e:
+            self.get_logger().error("Error converting HTML to text for {}: {}",
+                                    self.get_warc_header(record, 'WARC-Target-URI'), e)
+            self.records_parsing_failed.add(1)
         words = map(lambda w: w.lower(),
                     WordCountJob.word_pattern.findall(text))
         for word, count in Counter(words).items():
