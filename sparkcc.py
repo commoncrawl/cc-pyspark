@@ -71,7 +71,8 @@ class CCSparkJob(object):
 
         arg_parser.add_argument("input", help=self.input_descr)
         arg_parser.add_argument("output", help=self.output_descr)
-
+        arg_parser.add_argument("--html_parser", default="beautifulsoup",
+                                help="HTML parser: beautifulsoup or resiliparse")
         arg_parser.add_argument("--input_base_url",
                                 help="Base URL (prefix) used if paths to WARC/WAT/WET "
                                 "files are relative paths. Used to select the "
@@ -395,6 +396,22 @@ class CCSparkJob(object):
     @staticmethod
     def get_http_headers(record: ArcWarcRecord):
         return record.http_headers.headers
+
+    def get_html_parser(self):
+        try:
+            if self.args.html_parser == 'beautifulsoup':
+                from bs4_parser import HTMLParser
+                return HTMLParser()
+            elif self.args.html_parser == 'resiliparse':
+                from resiliparse_parser import HTMLParser
+                return HTMLParser()
+            else:
+                raise ValueError(
+                    "Unknown HTML parser: {}".format(self.args.html_parser)
+                )
+        except ImportError as e:
+            raise ImportError(f"Failed to import HTML parser module '{self.args.html_parser}'."
+                              f" Please ensure the module is correctly added to PySpark cluster: {str(e)}")
 
     @staticmethod
     def is_response_record(record: ArcWarcRecord):
