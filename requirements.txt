@@ -18,3 +18,8 @@ lxml
 #fastwarc
 # (tested with)
 #fastwarc==0.14.1
+
+# to parse HTML using Resiliparse (https://github.com/chatnoir-eu/chatnoir-resiliparse)
+#Resiliparse
+# (tested with)
+#Resiliparse==0.15.1
