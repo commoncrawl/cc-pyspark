@@ -16,6 +16,33 @@ class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
     records_parsing_failed = None
     records_non_html = None
 
+    def add_arguments(self, parser):
+        super(CCIndexWordCountJob, self).add_arguments(parser)
+        parser.add_argument(
+            "--html_parser", default="beautifulsoup",
+            help="HTML parser: beautifulsoup or resiliparse."
+                 " Make sure to install the correct dependencies for the parser and "
+                 "include the correct parser module (bs4_parser.py for beautifulsoup or resiliparse_parser.py for resiliparse) to the cluster"
+        )
+
+    def get_html_parser(self):
+        try:
+            if self.args.html_parser == 'beautifulsoup':
+                from bs4_parser import HTMLParser
+                return HTMLParser()
+            elif self.args.html_parser == 'resiliparse':
+                from resiliparse_parser import HTMLParser
+                return HTMLParser()
+            else:
+                raise ValueError(
+                    "Unknown HTML parser: {}".format(self.args.html_parser)
+                )
+        except ImportError as e:
+            raise ImportError(
+                f"Failed to import HTML parser module '{self.args.html_parser}'."
+                f" Please ensure the module is correctly added to PySpark cluster via `--py-files`: {str(e)}"
+            )
+
     def init_accumulators(self, session):
         super(CCIndexWordCountJob, self).init_accumulators(session)
 

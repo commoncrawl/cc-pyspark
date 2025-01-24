@@ -208,27 +208,6 @@ Some differences between the warcio and FastWARC APIs are hidden from the user i
 However, it's recommended that you carefully verify that your custom job implementation works in combination with FastWARC. There are subtle differences between the warcio and FastWARC APIs, including the underlying classes (WARC/HTTP headers and stream implementations). In addition, FastWARC does not support for legacy ARC files and does not automatically decode HTTP content and transfer encodings (see [Resiliparse HTTP Tools](https://resiliparse.chatnoir.eu/en/latest/man/parse/http.html#read-chunked-http-payloads)). While content and transfer encodings are already decoded in Common Crawl WARC files, this may not be the case for WARC files from other sources. See also [WARC 1.1 specification, http/https response records](https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#http-and-https-schemes).
 
 
-### Configuring HTML Parsers
-
-The project supports two HTML parser [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/) and [Resiliparse](https://resiliparse.chatnoir.eu/en/latest/man/installation.html) that can be specified using the `--html_parser` argument.
-By default, Beautifulsoup is used for parsing the HTML files.
-
-To configure the HTML parser.
-- use the `--html_parser` argument to specify the HTML parser to use when submitting the job
-- Install the correct dependencies for the parser
-- when running the job in a Spark cluster, include correct parser module (bs4_parser.py for beautifulsoup or resiliparse_parser.py for resiliparse) via `--py-files` in addition to `sparkcc.py` and further job-specific Python files. See also [running in a Spark cluster](#running-in-spark-cluster-over-large-amounts-of-data).
-
-Below an example call to count words in 10 WARC records host under the `.is` top-level domain using `Resiliparse`
-```
-$SPARK_HOME/bin/spark-submit \
-    ./cc_index_word_count.py \
-    --input_base_url s3://commoncrawl/ \
-    --query "SELECT url, warc_filename, warc_record_offset, warc_record_length, content_charset FROM ccindex WHERE crawl = 'CC-MAIN-2020-24' AND subset = 'warc' AND url_host_tld = 'is' LIMIT 10" \
-    s3a://commoncrawl/cc-index/table/cc-main/warc/ \
-    myccindexwordcountoutput \
-    --html_parser resiliparse
-```
-
 ## Credits
 
 Examples are originally ported from Stephen Merity's [cc-mrjob](https://github.com/commoncrawl/cc-mrjob/) with the following changes and upgrades:
