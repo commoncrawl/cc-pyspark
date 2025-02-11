@@ -71,7 +71,6 @@ class CCSparkJob(object):
 
         arg_parser.add_argument("input", help=self.input_descr)
         arg_parser.add_argument("output", help=self.output_descr)
-
         arg_parser.add_argument("--input_base_url",
                                 help="Base URL (prefix) used if paths to WARC/WAT/WET "
                                 "files are relative paths. Used to select the "

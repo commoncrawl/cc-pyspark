@@ -18,3 +18,8 @@ lxml
 #fastwarc
 # (tested with)
 #fastwarc==0.14.1
+
+# to parse HTML (used in cc_index_word_count.py) using Resiliparse (https://pypi.org/project/Resiliparse/). Resiliparse requires compatible fastwarc version.
+#Resiliparse
+# (tested with)
+#Resiliparse==0.14.1
