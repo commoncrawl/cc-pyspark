@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 
+from json_extractor import JsonExtractor
 from sparkcc import CCSparkJob
 
 
@@ -23,13 +24,18 @@ class ServerIPAddressJob(CCSparkJob):
     response_no_ip_address = '(no IP address)'
     response_no_host = '(no host name)'
 
+
+    def iterate_records(self, _warc_uri, archive_iterator):
+        self.json_extractor = JsonExtractor()
+        return super().iterate_records(_warc_uri, archive_iterator)
+
     def process_record(self, record):
         ip_address = None
         url = None
 
         if self.is_wat_json_record(record):
             # WAT (response) record
-            record = json.loads(self.get_payload_stream(record).read())
+            record = self.json_extractor.parse(self.get_payload_stream(record).read())
             try:
                 warc_header = record['Envelope']['WARC-Header-Metadata']
                 if warc_header['WARC-Type'] != 'response':

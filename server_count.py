@@ -1,5 +1,6 @@
 import ujson as json
 
+from json_extractor import JsonExtractor
 from sparkcc import CCSparkJob
 
 
@@ -9,6 +10,10 @@ class ServerCountJob(CCSparkJob):
 
     name = "CountServers"
     fallback_server_name = '(no server in HTTP header)'
+
+    def iterate_records(self, _warc_uri, archive_iterator):
+        self.json_extractor = JsonExtractor()
+        return super().iterate_records(_warc_uri, archive_iterator)
 
     def process_record(self, record):
         # Notes:
@@ -21,7 +26,7 @@ class ServerCountJob(CCSparkJob):
 
         if self.is_wat_json_record(record):
             # WAT (response) record
-            record = json.loads(self.get_payload_stream(record).read())
+            record = self.json_extractor.parse(self.get_payload_stream(record).read())
             try:
                 payload = record['Envelope']['Payload-Metadata']
                 if 'HTTP-Response-Metadata' in payload:
