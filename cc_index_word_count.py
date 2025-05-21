@@ -47,12 +47,15 @@ class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
         super(CCIndexWordCountJob, self).init_accumulators(session)
 
         sc = session.sparkContext
+        self.records_parse_success = sc.accumulator(0)
         self.records_parsing_failed = sc.accumulator(0)
         self.records_non_html = sc.accumulator(0)
 
     def log_accumulators(self, session):
         super(CCIndexWordCountJob, self).log_accumulators(session)
 
+        self.log_accumulator(session, self.records_parse_success,
+                             'records successfully parsed = {}')
         self.log_accumulator(session, self.records_parsing_failed,
                              'records failed to parse = {}')
         self.log_accumulator(session, self.records_non_html,
@@ -82,6 +85,7 @@ class CCIndexWordCountJob(WordCountJob, CCIndexWarcSparkJob):
             self.get_logger().error("Error converting HTML to text for {}: {}",
                                     self.get_warc_header(record, 'WARC-Target-URI'), e)
             self.records_parsing_failed.add(1)
+        self.records_parse_success.add(1)
         words = map(lambda w: w.lower(),
                     WordCountJob.word_pattern.findall(text))
         for word, count in Counter(words).items():
