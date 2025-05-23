@@ -29,12 +29,12 @@ class ServerCountJob(CCSparkJob):
                         server_names = []
                         headers = payload['HTTP-Response-Metadata']['Headers']
                         for header in headers:
-                             if header.lower() == 'server':
-                                 if isinstance(headers[header], list):
-                                     for server_name in headers[header]:
-                                         server_names.append(server_name.strip())
-                                 else:
-                                     server_names.append(headers[header].strip())
+                            if header.lower() == 'server':
+                                if isinstance(headers[header], list):
+                                    for server_name in headers[header]:
+                                        server_names.append(server_name.strip())
+                                else:
+                                    server_names.append(headers[header].strip())
                         if server_names:
                             for server_name in server_names:
                                 if server_name != '':
