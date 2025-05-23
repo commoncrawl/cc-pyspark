@@ -1,8 +1,5 @@
 from collections import Counter
 
-from bs4 import BeautifulSoup
-from bs4.dammit import EncodingDetector
-
 from sparkcc import CCIndexWarcSparkJob
 from word_count import WordCountJob
 

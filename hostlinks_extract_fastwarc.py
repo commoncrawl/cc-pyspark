@@ -1,5 +1,3 @@
-import ujson as json
-
 from fastwarc.warc import WarcRecordType
 
 from wat_extract_links import ExtractHostLinksJob, ExtractLinksJob
