@@ -23,3 +23,5 @@ lxml
 #Resiliparse
 # (tested with)
 #Resiliparse==0.14.1
+# Performant json parser. Comment out if not available for your environment.
+pysimdjson

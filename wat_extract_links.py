@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType
 
+from json_extractor import JsonExtractor
 from sparkcc import CCSparkJob
 
 
@@ -68,6 +69,7 @@ class ExtractLinksJob(CCSparkJob):
 
     def iterate_records(self, warc_uri, archive_iterator):
         """Iterate over all WARC records and process them"""
+        self.json_extractor = JsonExtractor()
         self.processing_robotstxt_warc \
             = ExtractLinksJob.robotstxt_warc_path_pattern.match(warc_uri)
         for record in archive_iterator:
@@ -79,7 +81,7 @@ class ExtractLinksJob(CCSparkJob):
         link_count = 0
         if self.is_wat_json_record(record):
             try:
-                wat_record = json.loads(self.get_payload_stream(record).read())
+                wat_record = self.json_extractor.parse(self.get_payload_stream(record).read())
             except ValueError as e:
                 self.get_logger().error('Failed to load JSON: {}'.format(e))
                 self.records_failed.add(1)
@@ -188,9 +190,9 @@ class ExtractLinksJob(CCSparkJob):
         has_links = False
         for l in links:
             link = None
-            if url_attr in l:
+            if url_attr is not None and url_attr in l:
                 link = l[url_attr]
-            elif opt_attr in l and ExtractLinksJob.url_abs_pattern.match(l[opt_attr]):
+            elif opt_attr is not None and opt_attr in l and ExtractLinksJob.url_abs_pattern.match(l[opt_attr]):
                 link = l[opt_attr]
             else:
                 continue
@@ -422,9 +424,9 @@ class ExtractHostLinksJob(ExtractLinksJob):
         for l in links:
             if not l:
                 continue
-            if url_attr in l:
+            if url_attr is not None and url_attr in l:
                 link = l[url_attr]
-            elif opt_attr in l and ExtractLinksJob.url_abs_pattern.match(l[opt_attr]):
+            elif opt_attr is not None and opt_attr in l and ExtractLinksJob.url_abs_pattern.match(l[opt_attr]):
                 link = l[opt_attr]
             else:
                 continue
