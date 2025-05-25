@@ -1,6 +1,5 @@
-import ujson as json
-
 from sparkcc import CCSparkJob
+from json_importer import json
 
 
 class ServerCountJob(CCSparkJob):

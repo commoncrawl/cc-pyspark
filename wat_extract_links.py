@@ -2,13 +2,12 @@ import idna
 import os
 import re
 
-import ujson as json
-
 from urllib.parse import urljoin, urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType
 
 from sparkcc import CCSparkJob
+from json_importer import json
 
 
 class ExtractLinksJob(CCSparkJob):
