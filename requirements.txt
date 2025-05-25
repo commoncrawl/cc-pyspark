@@ -2,6 +2,7 @@ botocore
 boto3
 requests
 ujson
+orjson
 warcio
 
 # for link extraction and webgraph construction also:
