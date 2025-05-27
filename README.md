@@ -39,7 +39,7 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with with Spark 3.2.3, 3.3.2 and 3.4.1 in combination with Python 3.8, 3.9 and 3.10. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
+Tested with with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
 
 
 ## Get Sample Data
@@ -57,6 +57,8 @@ Note that the sample data is from an older crawl (`CC-MAIN-2017-13` run in March
 
 
 ## Process Common Crawl Data on Spark
+
+CC-PySpark reads the list of input files from a manifest file. Typically, these are Common Crawl WARC, WAT or WET files, but it could be any other type of file, as long it is supported by the class implementing [CCSparkJob](./sparkcc.py). The files can be given as absolute URLs or as paths relative to a base URL (option `--input_base_url`). The URL cat point to a local file (`file://`), to a remote location (typically below `s3://commoncrawl/` resp. `https://data.commoncrawl.org/`). For development and testing, you'd start with local files.
 
 ### Running locally
 
