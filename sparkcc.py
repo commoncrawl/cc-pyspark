@@ -56,7 +56,7 @@ class CCSparkJob(object):
     s3client = None
 
     # pattern to split a data URL (<scheme>://<netloc>/<path> or <scheme>:/<path>)
-    data_url_pattern = re.compile('^(s3|https?|file|hdfs|s3a|s3n):(?://([^/]*))?/(.*)')
+    data_url_pattern = re.compile('^(s3[an]?|https?|file|hdfs):(?://([^/]*))?/(.*)')
 
 
     def parse_arguments(self):
@@ -120,8 +120,8 @@ class CCSparkJob(object):
     def add_arguments(self, parser):
         """Allows derived classes to add command-line arguments.
            Derived classes overriding this method must call
-           super().add_arguments(parser) in order to add "register"
-           arguments from all classes in the hierarchy."""
+           super().add_arguments(parser) in order to "register"
+           arguments from all classes in the class hierarchy."""
         pass
 
     def validate_arguments(self, args):
@@ -633,9 +633,9 @@ class CCFileProcessorSparkJob(CCSparkJob):
     def add_arguments(self, parser):
         super(CCSparkJob, self).add_arguments(parser)
         parser.add_argument("--output_base_uri", required=False,
-                            default='./output',
-                            help="Base URI to write output files to. Useful if your job uses write_output_file or check_for_output_file.")
-        
+                            help="Base URI to write output files to. Useful if your job "
+                                 "uses write_output_file or check_for_output_file.")
+
     def run_job(self, session):
         input_data = session.sparkContext.textFile(self.args.input,
                                                    minPartitions=self.args.num_input_partitions)
@@ -706,8 +706,8 @@ class CCFileProcessorSparkJob(CCSparkJob):
 
             if response.ok:
                 # includes "HTTP 206 Partial Content" for range requests
-                warctemp = NamedTemporaryFile(  mode='w+b',
-                                                dir=self.args.local_temp_dir)
+                warctemp = NamedTemporaryFile(mode='w+b',
+                                              dir=self.args.local_temp_dir)
                 warctemp.write(response.content)
                 warctemp.flush()
                 warctemp.seek(0)
@@ -726,7 +726,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
             warctemp = open(uri, 'rb')
 
         return warctemp
-    
+
     def process_files(self, _id, iterator):
         """Process files, calling process_file(...) for each file"""
         for uri in iterator:
@@ -738,13 +738,13 @@ class CCFileProcessorSparkJob(CCSparkJob):
 
             for res in self.process_file(uri, tempfd):
                 yield res
-            
+
             tempfd.close()
 
     def process_file(self, uri, tempfd):
         """Process a single file"""
         raise NotImplementedError('Processing file needs to be customized')
-    
+
     # See if we can get to the bucket referred to in the uri.
     # note: if uri is not s3, this will return True
     def validate_s3_bucket_from_uri(self, uri):
@@ -828,7 +828,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 base_dir = os.path.abspath(os.path.dirname(__file__))
                 uri = os.path.join(base_dir, uri)
             return os.path.exists(uri)
-        
+
     # like fetch_warc, but will write a file to local, s3, or hdfs
     def write_output_file(self, uri, fd, base_uri=None):
         """

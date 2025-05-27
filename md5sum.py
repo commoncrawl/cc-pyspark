@@ -1,7 +1,8 @@
 import subprocess
-import os
+
 from sparkcc import CCFileProcessorSparkJob
 from pyspark.sql.types import StructType, StructField, StringType
+
 
 class MD5Sum(CCFileProcessorSparkJob):
     """MD5 sum of each file, calling the command-line utility 'md5sum'"""
