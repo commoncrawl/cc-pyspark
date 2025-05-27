@@ -12,7 +12,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
 + [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
 
-+ [md5](./md5sum.py) Run an external command on entire files from a manifest (WARC, WET, WAT, or any other type of file.)
++ [md5sum](./md5sum.py) Run an external command (`md5sum`) on a list of files from a manifest – WARC, WET, WAT, or any other type of file.
 
 + [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
 
