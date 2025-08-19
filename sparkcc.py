@@ -696,7 +696,6 @@ class CCFileProcessorSparkJob(CCSparkJob):
             except botocore.client.ClientError as exception:
                 self.get_logger().error(
                     'Failed to download {}: {}'.format(uri, exception))
-                self.warc_input_failed.add(1)
                 warctemp.close()
                 return
         elif scheme == 'http' or scheme == 'https':
@@ -723,23 +722,28 @@ class CCFileProcessorSparkJob(CCSparkJob):
             else:
                 base_dir = os.path.abspath(os.path.dirname(__file__))
                 uri = os.path.join(base_dir, uri)
-            warctemp = open(uri, 'rb')
+            try:
+                warctemp = open(uri, 'rb')
+            except Exception as exception:
+                self.get_logger().error(
+                    'Failed to open local file {}: {}'.format(uri, exception))
+                return
 
         return warctemp
 
     def process_files(self, _id, iterator):
         """Process files, calling process_file(...) for each file"""
         for uri in iterator:
-            self.warc_input_processed.add(1)
-
             tempfd = self.fetch_file(uri, self.args.input_base_url)
             if not tempfd:
+                self.warc_input_failed.add(1)
                 continue
 
             for res in self.process_file(uri, tempfd):
                 yield res
 
             tempfd.close()
+            self.warc_input_processed.add(1)
 
     def process_file(self, uri, tempfd):
         """Process a single file"""
