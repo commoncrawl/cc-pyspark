@@ -631,10 +631,16 @@ class CCFileProcessorSparkJob(CCSparkJob):
     name = 'CCFileProcessor'
 
     def add_arguments(self, parser):
-        super(CCSparkJob, self).add_arguments(parser)
-        parser.add_argument("--output_base_uri", required=False,
-                            help="Base URI to write output files to. Useful if your job "
+        parser.add_argument("--output_base_url", required=False,
+                            help="Base URL to write output files to. Useful if your job "
                                  "uses write_output_file or check_for_output_file.")
+
+    def log_accumulators(self, session):
+        """Log counters/accumulators, see `init_accumulators`."""
+        self.log_accumulator(session, self.warc_input_processed,
+                             'Input files processed = {}')
+        self.log_accumulator(session, self.warc_input_failed,
+                             'Input files failed = {}')
 
     def run_job(self, session):
         input_data = session.sparkContext.textFile(self.args.input,
