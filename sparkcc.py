@@ -755,33 +755,6 @@ class CCFileProcessorSparkJob(CCSparkJob):
         """Process a single file"""
         raise NotImplementedError('Processing file needs to be customized')
 
-    # See if we can get to the bucket referred to in the uri.
-    # note: if uri is not s3, this will return True
-    def validate_s3_bucket_from_uri(self, uri):
-        """
-        Validate that the bucket exists in the S3 URI
-        """
-        if uri is None or len(uri) == 0:
-            return True
-        (scheme, netloc, path) = (None, None, None)
-        uri_match = self.data_url_pattern.match(uri)
-        if uri_match:
-            (scheme, netloc, path) = uri_match.groups()
-        if scheme in ['s3', 's3a', 's3n']:
-            bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return False
-            try:
-                self.get_s3_client().head_bucket(Bucket=bucketname)
-            except botocore.exceptions.ClientError as e:
-                self.get_logger().error("Failed to access bucket: " + bucketname)
-                return False
-            return True
-        return True
-
-
-    # Like fetch_warc, where we will check if a local file, file on s3, etc exists or not.
     def check_for_output_file(self, uri, base_uri=None):
         """
         Check if output file exists. This is a modified version of fetch_warc:
@@ -819,16 +792,6 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 self.get_logger().error(
                     'Failed to check if file exists on S3 {}: {}'.format(uri, exception))
                 return False
-        elif scheme == 'http' or scheme == 'https':
-            headers = None
-            self.get_logger().info('Checking if file exists {}'.format(uri))
-            response = requests.head(uri, headers=headers)
-            if response.ok:
-                return True
-            else:
-                self.get_logger().error(
-                    'Failed to check if file exists {}: {}'.format(uri, response.status_code))
-                return False
         else:
             self.get_logger().info('Checking if local file exists {}'.format(uri))
             if scheme == 'file':
@@ -839,11 +802,9 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 uri = os.path.join(base_dir, uri)
             return os.path.exists(uri)
 
-    # like fetch_warc, but will write a file to local, s3, or hdfs
     def write_output_file(self, uri, fd, base_uri=None):
         """
-        Write file. This is a modified version of fetch_warc:
-        It does not currently support hdfs, but that could be added if needed.
+        Write output file.
         """
         (scheme, netloc, path) = (None, None, None)
         uri_match = self.data_url_pattern.match(uri)
