@@ -229,9 +229,37 @@ class CCSparkJob(object):
             self.s3client = boto3.client('s3', use_ssl=False)
         return self.s3client
 
-    def fetch_warc(self, uri, base_uri=None, offset=-1, length=-1):
-        """Fetch WARC/WAT/WET files (or a record if offset and length are given)"""
+    def verify_s3_location(self, bucketname, path, uri):
+        """Verify a location on S3: return the normalized path
+        (the S3 object key name) or None if verification fails."""
+        if not bucketname:
+            self.get_logger().error("Invalid S3 URI: " + uri)
+            return None
+        if not path:
+            self.get_logger().error("Empty S3 path: " + uri)
+            return None
+        if path[0] == '/':
+            # must strip leading `/` in S3 path
+            path = path[1:]
+        return path
 
+    def convert_file_uri_to_path(self, scheme, path, uri):
+        """Convert a file:// URI into an absolute file path.
+        A relative URI is considered as file path relative
+        to the script's directory.'"""
+        if scheme == 'file':
+            # must be an absolute path
+            return os.path.join('/', path)
+        else:
+            # assume a relative path
+            base_dir = os.path.abspath(os.path.dirname(__file__))
+            return os.path.join(base_dir, uri)
+
+    def resolve_split_uri(self, uri, base_uri=None):
+        """Resolve relative URIs using the provided base URI and
+        split the resolved URI into scheme, netloc, and path.
+        Returns a tuple of (resolved_uri, scheme, netloc, path).
+        """
         (scheme, netloc, path) = (None, None, None)
         uri_match = self.data_url_pattern.match(uri)
         if not uri_match and base_uri:
@@ -244,24 +272,24 @@ class CCSparkJob(object):
         else:
             # keep local file paths as is
             path = uri
+        return (uri, scheme, netloc, path)
+
+    def fetch_warc(self, uri, base_uri=None, offset=-1, length=-1):
+        """Fetch WARC/WAT/WET files (or a record if offset and length are given)"""
+
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
 
         stream = None
 
         if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return
+            path = self.verify_s3_location(bucketname, path, uri)
             if not path:
-                self.get_logger().error("Empty S3 path: " + uri)
                 return
-            elif path[0] == '/':
-                # must strip leading / in S3 path
-                path = path[1:]
             if offset > -1 and length > 0:
                 rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
                 # Note: avoid logging too many small fetches
-                #self.get_logger().debug('Fetching {} ({})'.format(uri, rangereq))
+                self.get_logger().debug('Fetching {} ({})'.format(uri, rangereq))
                 try:
                     response = self.get_s3_client().get_object(Bucket=bucketname,
                                                                Key=path,
@@ -294,7 +322,7 @@ class CCSparkJob(object):
                     "Range": "bytes={}-{}".format(offset, (offset + length - 1))
                 }
                 # Note: avoid logging many small fetches
-                #self.get_logger().debug('Fetching {} ({})'.format(uri, headers))
+                self.get_logger().debug('Fetching %s (%s)', uri, headers)
             else:
                 self.get_logger().info('Fetching {}'.format(uri))
             response = requests.get(uri, headers=headers)
@@ -322,13 +350,9 @@ class CCSparkJob(object):
                 self.warc_input_failed.add(1)
 
         else:
+            # local file or file:// URI
             self.get_logger().info('Reading local file {}'.format(uri))
-            if scheme == 'file':
-                # must be an absolute path
-                uri = os.path.join('/', path)
-            else:
-                base_dir = os.path.abspath(os.path.dirname(__file__))
-                uri = os.path.join(base_dir, uri)
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
             try:
                 stream = open(uri, 'rb')
             except IOError as exception:
@@ -624,8 +648,10 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
 
 class CCFileProcessorSparkJob(CCSparkJob):
     """
-    A Spark job definition to process entire files from a manifest.
-    (as opposed to processing individual WARC records)
+    A Spark job definition to process entire files from a manifest
+    (as opposed to processing individual WARC records).
+    The class also provides methods to write extra output files,
+    in addition to the default output table.
     """
 
     name = 'CCFileProcessor'
@@ -666,32 +692,15 @@ class CCFileProcessorSparkJob(CCSparkJob):
         Use NamedTemporaryFile so we can support external tools that require a file path.
         """
 
-        (scheme, netloc, path) = (None, None, None)
-        uri_match = self.data_url_pattern.match(uri)
-        if not uri_match and base_uri:
-            # relative input URI (path) and base URI defined
-            uri = base_uri + uri
-            uri_match = self.data_url_pattern.match(uri)
-
-        if uri_match:
-            (scheme, netloc, path) = uri_match.groups()
-        else:
-            # keep local file paths as is
-            path = uri
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
 
         warctemp = None
 
         if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return
+            path = self.verify_s3_location(bucketname, path, uri)
             if not path:
-                self.get_logger().error("Empty S3 path: " + uri)
                 return
-            elif path[0] == '/':
-                # must strip leading / in S3 path
-                path = path[1:]
             self.get_logger().info('Reading from S3 {}'.format(uri))
             # download entire file using a temporary file for buffering
             warctemp = NamedTemporaryFile(mode='w+b', dir=self.args.local_temp_dir)
@@ -704,6 +713,7 @@ class CCFileProcessorSparkJob(CCSparkJob):
                     'Failed to download {}: {}'.format(uri, exception))
                 warctemp.close()
                 return
+
         elif scheme == 'http' or scheme == 'https':
             headers = None
             self.get_logger().info('Fetching {}'.format(uri))
@@ -720,14 +730,11 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 self.get_logger().error(
                     'Failed to download {}: {}'.format(uri, response.status_code))
                 return
+
         else:
+            # local file or file:// URI
             self.get_logger().info('Reading local file {}'.format(uri))
-            if scheme == 'file':
-                # must be an absolute path
-                uri = os.path.join('/', path)
-            else:
-                base_dir = os.path.abspath(os.path.dirname(__file__))
-                uri = os.path.join(base_dir, uri)
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
             try:
                 warctemp = open(uri, 'rb')
             except Exception as exception:
@@ -757,31 +764,15 @@ class CCFileProcessorSparkJob(CCSparkJob):
 
     def check_for_output_file(self, uri, base_uri=None):
         """
-        Check if output file exists. This is a modified version of fetch_warc:
-        It does not currently support hdfs, but that could be added if needed.
+        Check if output file exists.
         """
-        (scheme, netloc, path) = (None, None, None)
-        uri_match = self.data_url_pattern.match(uri)
-        if not uri_match and base_uri:
-            # relative input URI (path) and base URI defined
-            uri = base_uri + uri
-            uri_match = self.data_url_pattern.match(uri)
-        if uri_match:
-            (scheme, netloc, path) = uri_match.groups()
-        else:
-            # keep local file paths as is
-            path = uri
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
+
         if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return
+            path = self.verify_s3_location(bucketname, path, uri)
             if not path:
-                self.get_logger().error("Empty S3 path: " + uri)
-                return
-            elif path[0] == '/':
-                # must strip leading / in S3 path
-                path = path[1:]
+                return False
             self.get_logger().info('Checking if file exists on S3 {}'.format(uri))
             try:
                 self.get_s3_client().head_object(Bucket=bucketname, Key=path)
@@ -792,56 +783,35 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 self.get_logger().error(
                     'Failed to check if file exists on S3 {}: {}'.format(uri, exception))
                 return False
+
         else:
+            # local file or file:// URI
             self.get_logger().info('Checking if local file exists {}'.format(uri))
-            if scheme == 'file':
-                # must be an absolute path
-                uri = os.path.join('/', path)
-            else:
-                base_dir = os.path.abspath(os.path.dirname(__file__))
-                uri = os.path.join(base_dir, uri)
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
             return os.path.exists(uri)
 
     def write_output_file(self, uri, fd, base_uri=None):
         """
-        Write output file.
+        Write data from stream fd to output file location defined per URI.
         """
-        (scheme, netloc, path) = (None, None, None)
-        uri_match = self.data_url_pattern.match(uri)
-        if not uri_match and base_uri:
-            # relative input URI (path) and base URI defined
-            uri = base_uri + uri
-            uri_match = self.data_url_pattern.match(uri)
-        if uri_match:
-            (scheme, netloc, path) = uri_match.groups()
-        else:
-            # keep local file paths as is
-            path = uri
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
+
         if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return
+            path = self.verify_s3_location(bucketname, path, uri)
             if not path:
-                self.get_logger().error("Empty S3 path: " + uri)
                 return
-            elif path[0] == '/':
-                # must strip leading / in S3 path
-                path = path[1:]
             self.get_logger().info('Writing to S3 {}'.format(uri))
             try:
                 self.get_s3_client().upload_fileobj(fd, bucketname, path)
             except botocore.client.ClientError as exception:
                 self.get_logger().error(
                     'Failed to write to S3 {}: {}'.format(uri, exception))
+
         else:
+            # local file or file:// URI
             self.get_logger().info('Writing local file {}'.format(uri))
-            if scheme == 'file':
-                # must be an absolute path
-                uri = os.path.join('/', path)
-            else:
-                base_dir = os.path.abspath(os.path.dirname(__file__))
-                uri = os.path.join(base_dir, uri)
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
             os.makedirs(os.path.dirname(uri), exist_ok=True)
             with open(uri, 'wb') as f:
                 f.write(fd.read())
