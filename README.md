@@ -6,7 +6,7 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
 + [count HTML tags](./html_tag_count.py) in Common Crawl's raw response data (WARC files)
 
-+ [count web server names](./server_count.py) in Common Crawl's metadata (WAT files or WARC files)
++ [count web server names](./server_count.py) in Common Crawl's metadata (HTTP headers in WAT or WARC files)
 
 + list host names and corresponding [IP addresses](./server_ip_address.py) (WAT files or WARC files)
 
@@ -15,6 +15,8 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 + [md5sum](./md5sum.py) Run an external command (`md5sum`) on a list of files from a manifest – WARC, WET, WAT, or any other type of file.
 
 + [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
+
++ [WET extractor](./wet_extractor.py), using FastWARC and Resiliparse. See also [Using FastWARC](#using-fastwarc-to-read-warc-files).
 
 + work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](https://github.com/commoncrawl/cc-index-table) and the notes about [querying the columnar index](#querying-the-columnar-index)):
 
@@ -41,7 +43,7 @@ pip install -r requirements.txt
 
 ## Compatibility and Requirements
 
-Tested with with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
+Tested with with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5, 3.5.6 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
 
 
 ## Get Sample Data
@@ -197,7 +199,7 @@ Alternatively, it's possible configure the table schema explicitly:
 - and use it by adding the command-line argument `--table_schema cc-index-schema-flat.json`.
 
 
-### Using FastWARC to parse WARC files
+### Using FastWARC to read WARC files
 
 > [FastWARC](https://resiliparse.chatnoir.eu/en/latest/man/fastwarc.html) is a high-performance WARC parsing library for Python written in C++/Cython. The API is inspired in large parts by WARCIO, but does not aim at being a drop-in replacement.
 
