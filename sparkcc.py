@@ -688,8 +688,9 @@ class CCFileProcessorSparkJob(CCSparkJob):
     def fetch_file(self, uri, base_uri=None):
         """
         Fetch file. This is a modified version of fetch_warc:
-        It does not currently support hdfs, but that could be added if needed.
-        Use NamedTemporaryFile so we can support external tools that require a file path.
+        Applicable to input files of any format, not specialized on WARC files.
+        It uses name temporary files which allows to use external tools that
+        require a file path, cf. the md5sum example tool.
         """
 
         (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
@@ -730,6 +731,9 @@ class CCFileProcessorSparkJob(CCSparkJob):
                 self.get_logger().error(
                     'Failed to download {}: {}'.format(uri, response.status_code))
                 return
+
+        elif scheme == 'hdfs':
+            raise NotImplementedError('HDFS input not implemented')
 
         else:
             # local file or file:// URI
@@ -784,6 +788,12 @@ class CCFileProcessorSparkJob(CCSparkJob):
                     'Failed to check if file exists on S3 {}: {}'.format(uri, exception))
                 return False
 
+        elif scheme == 'http' or scheme == 'https':
+            raise ValueError('HTTP/HTTPS output not supported')
+
+        elif scheme == 'hdfs':
+            raise NotImplementedError('HDFS output not implemented')
+
         else:
             # local file or file:// URI
             self.get_logger().info('Checking if local file exists {}'.format(uri))
@@ -807,6 +817,12 @@ class CCFileProcessorSparkJob(CCSparkJob):
             except botocore.client.ClientError as exception:
                 self.get_logger().error(
                     'Failed to write to S3 {}: {}'.format(uri, exception))
+
+        elif scheme == 'http' or scheme == 'https':
+            raise ValueError('HTTP/HTTPS output not supported')
+
+        elif scheme == 'hdfs':
+            raise NotImplementedError('HDFS output not implemented')
 
         else:
             # local file or file:// URI
