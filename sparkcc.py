@@ -24,7 +24,9 @@ LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 class CCSparkJob(object):
     """
     A simple Spark job definition to process Common Crawl data
-    (WARC/WAT/WET files using Spark and warcio)
+    (WARC/WAT/WET files) using Spark and warcio. The list of input files
+    is read from a manifest file, typically one of the WARC/WAT/WET path
+    listings.
     """
 
     name = 'CCSparkJob'
@@ -454,7 +456,7 @@ class CCSparkJob(object):
 
 class CCIndexSparkJob(CCSparkJob):
     """
-    Process the Common Crawl columnar URL index
+    Query Common Crawl's columnar URL index.
     """
 
     name = "CCIndexSparkJob"
@@ -522,7 +524,8 @@ class CCIndexSparkJob(CCSparkJob):
 
 class CCIndexWarcSparkJob(CCIndexSparkJob):
     """
-    Process Common Crawl data (WARC records) found by the columnar URL index
+    Process Common Crawl data (WARC records) found by a query
+    to the columnar URL index.
     """
 
     name = "CCIndexWarcSparkJob"
@@ -648,8 +651,8 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
 
 class CCFileProcessorSparkJob(CCSparkJob):
     """
-    A Spark job definition to process entire files from a manifest
-    (as opposed to processing individual WARC records).
+    A Spark job definition to process any kind of files
+    read from a manifest (as opposed to processing individual WARC records).
     The class also provides methods to write extra output files,
     in addition to the default output table.
     """
