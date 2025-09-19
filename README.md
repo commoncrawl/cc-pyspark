@@ -259,6 +259,20 @@ Some differences between the warcio and FastWARC APIs are hidden from the user i
 
 However, it's recommended that you carefully verify that your custom job implementation works in combination with FastWARC. There are subtle differences between the warcio and FastWARC APIs, including the underlying classes (WARC/HTTP headers and stream implementations). In addition, FastWARC does not support for legacy ARC files and does not automatically decode HTTP content and transfer encodings (see [Resiliparse HTTP Tools](https://resiliparse.chatnoir.eu/en/latest/man/parse/http.html#read-chunked-http-payloads)). While content and transfer encodings are already decoded in Common Crawl WARC files, this may not be the case for WARC files from other sources. See also [WARC 1.1 specification, http/https response records](https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#http-and-https-schemes).
 
+FastWARC allows to filter unwanted WARC record types at parse time, e.g., skip request records immediately not even passing them forward to the caller. To get the maximum performance from FastWARC, it's recommended to utilize the filters by setting the static class variable `fastwarc_record_filter`.
+
+The following examples are ported to use FastWARC:
++ [count HTML tags](./html_tag_count_fastwarc.py)
++ [count web server names](./server_count_fastwarc.py)
++ list host names and corresponding [IP addresses](./server_ip_address_fastwarc.py)
++ [word count](./word_count_fastwarc.py)
+
+In addition, the following tools are implemented using FastWARC:
++ [extract host-level links](./hostlinks_extract_fastwarc.py)
++ [WET extractor](./wet_extractor.py)
+
+Please refer to the above [description of examples](#common-crawl-pyspark-examples) for additional details.
+
 
 ## Running the Tests
 

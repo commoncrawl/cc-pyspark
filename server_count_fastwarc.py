@@ -7,7 +7,7 @@ from server_count import ServerCountJob
 class ServerCountFastWarcJob(ServerCountJob, CCFastWarcSparkJob):
     """ Count server names sent in HTTP response header
         (WARC and WAT is allowed as input) using FastWARC
-        to parse WARC files"""
+        to read WARC files"""
 
     name = "CountServers"
 
