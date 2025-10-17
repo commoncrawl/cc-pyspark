@@ -6,6 +6,7 @@ import re
 
 from io import BytesIO
 from tempfile import SpooledTemporaryFile, TemporaryFile
+from typing import Literal
 
 import boto3
 import botocore
@@ -33,6 +34,8 @@ class CCSparkJob(object):
         StructField("key", StringType(), True),
         StructField("val", LongType(), True)
     ])
+
+    merge_method: Literal['reduceValues', 'reduceValuesWithKeys'] = 'reduceValues'
 
     # description of input and output shown by --help
     input_descr = "Path to file listing input paths"
@@ -207,12 +210,19 @@ class CCSparkJob(object):
     def reduce_by_key_func(a, b):
         return a + b
 
+    def reduce_grouped_by_key_func(self, kv: tuple):
+        return kv
+
     def run_job(self, session):
         input_data = session.sparkContext.textFile(self.args.input,
                                                    minPartitions=self.args.num_input_partitions)
 
-        output = input_data.mapPartitionsWithIndex(self.process_warcs) \
-            .reduceByKey(self.reduce_by_key_func)
+        output = input_data.mapPartitionsWithIndex(self.process_warcs)
+        #self.get_logger().warning("merge method:", self.merge_method)
+        if self.merge_method == 'reduceValuesWithKeys':
+            output = output.groupByKey().map(lambda kv: self.reduce_grouped_by_key_func(kv))
+        else:
+            output = output.reduceByKey(self.reduce_by_key_func)
 
         session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
@@ -608,8 +618,11 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             columns.append('content_charset')
         warc_recs = sqldf.select(*columns).rdd
 
-        output = warc_recs.mapPartitions(self.fetch_process_warc_records) \
-            .reduceByKey(self.reduce_by_key_func)
+        output = warc_recs.mapPartitions(self.fetch_process_warc_records)
+        if self.merge_method == 'reduceValuesWithKeys':
+            output = output.groupByKey().map(self.reduce_grouped_by_key_func)
+        else:
+            output = output.reduceByKey(self.reduce_by_key_func)
 
         session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
