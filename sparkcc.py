@@ -35,7 +35,7 @@ class CCSparkJob(object):
         StructField("val", LongType(), True)
     ])
 
-    merge_method: Literal['reduceValues', 'reduceValuesWithKeys'] = 'reduceValues'
+    merge_method: Literal['reduce_by_key', 'reduce_group_by_key'] = 'reduce_by_key'
 
     # description of input and output shown by --help
     input_descr = "Path to file listing input paths"
@@ -210,7 +210,8 @@ class CCSparkJob(object):
     def reduce_by_key_func(a, b):
         return a + b
 
-    def reduce_grouped_by_key_func(self, kv: tuple):
+    @staticmethod
+    def reduce_group_by_key_func(kv: tuple):
         return kv
 
     def run_job(self, session):
@@ -219,10 +220,12 @@ class CCSparkJob(object):
 
         output = input_data.mapPartitionsWithIndex(self.process_warcs)
         #self.get_logger().warning("merge method:", self.merge_method)
-        if self.merge_method == 'reduceValuesWithKeys':
-            output = output.groupByKey().map(lambda kv: self.reduce_grouped_by_key_func(kv))
-        else:
+        if self.merge_method == 'reduce_group_by_key':
+            output = output.groupByKey().map(self.reduce_group_by_key_func)
+        elif self.merge_method == 'reduce_by_key':
             output = output.reduceByKey(self.reduce_by_key_func)
+        else:
+            raise ValueError(f"Unknown merge method: {self.merge_method}")
 
         session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
@@ -619,10 +622,12 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
         warc_recs = sqldf.select(*columns).rdd
 
         output = warc_recs.mapPartitions(self.fetch_process_warc_records)
-        if self.merge_method == 'reduceValuesWithKeys':
-            output = output.groupByKey().map(self.reduce_grouped_by_key_func)
-        else:
+        if self.merge_method == 'reduce_group_by_key':
+            output = output.groupByKey().map(self.reduce_group_by_key_func)
+        elif self.merge_method == 'reduce_by_key':
             output = output.reduceByKey(self.reduce_by_key_func)
+        else:
+            raise ValueError(f"Unknown merge method: {self.merge_method}")
 
         session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \

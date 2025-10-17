@@ -45,3 +45,9 @@ for data_type in warc wat wet; do
 
 done
 
+echo "Downloading sample robots.txt file..."
+ccfile='crawl-data/CC-MAIN-2017-30/segments/1500549423183.57/robotstxt/CC-MAIN-20170720121902-20170720141902-00000.warc.gz'
+mkdir -p `dirname "$ccfile"`
+wget --no-clobber https://data.commoncrawl.org/$ccfile -O $ccfile
+
+

@@ -1,5 +1,6 @@
 import re
-from urllib.parse import urlparse, urljoin
+from typing import Optional
+from urllib.parse import urlparse, urljoin, ParseResult
 
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from warcio.recordloader import ArcWarcRecord
@@ -16,7 +17,7 @@ class SitemapExtractorJob(CCSparkJob):
         StructField('hosts', ArrayType(StringType()), True)
     ])
 
-    #merge_method = 'combineByKey'
+    merge_method = 'reduce_group_by_key'
 
     # rb: match on raw bytes so we can defer utf-8 decoding to the `sitemap:` line
     sitemap_pattern = re.compile(rb'^sitemap:\s*(\S+)', re.I)
@@ -41,30 +42,24 @@ class SitemapExtractorJob(CCSparkJob):
         self.robots_txt_announcing_sitemap = sc.accumulator(0)
         self.robots_txt_with_more_than_50_sitemaps = sc.accumulator(0)
 
-    def reduce_grouped_by_key_func(self, kv: tuple):
+    @staticmethod
+    def reduce_group_by_key_func(kv: tuple):
         """Map sitemap URL to cross-submit hosts:
             sitemap_url => [host_1, ..., host_n]"""
-        key, values = kv
+        sitemap_uri, hosts_lists = kv
         try:
-            sitemap_uri = urlparse(key)
-        except Exception as url_parse_error:
-            try:
-                self.get_logger().warn('Invalid sitemap URL: %s - %s', key, url_parse_error)
-            except UnicodeEncodeError as unicode_error:
-                self.get_logger().warn('Invalid sitemap URL (cannot display): %s - %s', url_parse_error, unicode_error)
-            self.sitemap_url_invalid.add(1)
-            return
+            sitemap_host = urlparse(sitemap_uri).netloc.lower().lstrip('.')
+        except Exception as e:
+            raise RuntimeError("A sitemap URI somehow made it through the initial parsing phase, this shouldn't happen: " + repr(e))
 
-        sitemap_host = sitemap_uri.netloc.lower().lstrip('.')
         cross_submit_hosts = set()
 
-        for robots_txt_hosts in values:
+        for robots_txt_hosts in hosts_lists:
             for robots_txt_host in robots_txt_hosts:
                 if robots_txt_host != sitemap_host:
                     cross_submit_hosts.add(robots_txt_host)
 
-        self.get_logger().warn(f'Cross submit hosts: {key} {cross_submit_hosts}')
-        yield key, list(cross_submit_hosts)
+        return sitemap_uri, list(cross_submit_hosts)
 
 
     def process_record(self, record: ArcWarcRecord):
@@ -94,21 +89,20 @@ class SitemapExtractorJob(CCSparkJob):
                     self.sitemap_url_invalid_encoding.add(1)
                     continue
 
+                if self._try_parse_url(sitemap_url, label_for_log='sitemap') is None:
+                    self.sitemap_url_invalid.add(1)
+                    continue
+
                 if url is None:
                     # first sitemap found: set base URL and get host from URL
                     url = record.rec_headers['WARC-Target-URI']
-                    try:
-                        host = urlparse(url).netloc.lower().lstrip('.')
-                    except Exception as url_parse_error:
-                        try:
-                            self.get_logger().warning('Invalid robots.txt URL: %s - %s',
-                                                     url, str(url_parse_error))
-                        except UnicodeEncodeError as unicode_error:
-                            self.get_logger().warning('Invalid robots.txt URL (cannot be displayed) - %s - %',
-                                                      str(url_parse_error), str(unicode_error))
-                        self.robots_txt_invalid_url.add(1)
+                    url_parsed = self._try_parse_url(url, label_for_log='robots.txt')
+                    if url_parsed is None:
                         # skip this robots.txt record
+                        self.robots_txt_invalid_url.add(1)
                         return
+
+                    host = url_parsed.netloc.lower().lstrip('.')
 
                 if not sitemap_url.startswith('http'):
                     sitemap_url = urljoin(url, sitemap_url)
@@ -120,6 +114,19 @@ class SitemapExtractorJob(CCSparkJob):
 
         if n_sitemaps > 50:
             self.robots_txt_with_more_than_50_sitemaps.add(1)
+
+
+    def _try_parse_url(self, url, label_for_log) -> Optional[ParseResult]:
+        try:
+            return urlparse(url)
+        except Exception as url_parse_error:
+            try:
+                self.get_logger().warn('Invalid %s URL: %s - %s', label_for_log, url, url_parse_error)
+            except UnicodeEncodeError as unicode_error:
+                self.get_logger().warn('Invalid %s URL (cannot be displayed): %s - %s',
+                                       label_for_log, url_parse_error, unicode_error)
+            return None
+
 
 if __name__ == '__main__':
     job = SitemapExtractorJob()
