@@ -50,7 +50,7 @@ class SitemapExtractorJob(CCSparkJob):
         try:
             sitemap_host = urlparse(sitemap_uri).netloc.lower().lstrip('.')
         except Exception as e:
-            raise RuntimeError("A sitemap URI somehow made it through the initial parsing phase, this shouldn't happen: " + repr(e))
+            raise RuntimeError("A invalid sitemap URI somehow made it through the initial parsing phase, this shouldn't happen: " + repr(e))
 
         cross_submit_hosts = set()
 
