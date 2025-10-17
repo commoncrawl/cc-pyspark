@@ -7,6 +7,8 @@ from pyspark.sql import SparkSession
 from warcio.recordloader import ArcWarcRecord
 
 from sitemaps_from_robotstxt import SitemapExtractorJob
+from utils import _process_jobs
+
 
 @pytest.fixture(scope='session')
 def spark():
@@ -39,24 +41,6 @@ Sitemap: http://ajedrezhoygol.blogspot.com/sitemap.xml
     assert results[0][0] == 'http://ajedrezhoygol.blogspot.com/sitemap.xml'
     assert results[0][1] == ["ajedrezhoygol.blogspot.com.ar"]
 
-
-def test_empty_record(spark):
-    record = make_robots_txt_record("http://agencasinosbobet5.weebly.com/robots.txt",
-"""Sitemap: http://agencasinosbobet5.weebly.com/sitemap.xml
-
-User-agent: NerdyBot
-Disallow: /
-
-User-agent: *
-Disallow: /ajax/
-Disallow: /apps/
-""")
-    job = SitemapExtractorJob()
-    job.init_accumulators(session=spark)
-    results = list(job.process_record(record))
-    assert len(results) == 1
-    assert results[0][0] == 'http://agencasinosbobet5.weebly.com/sitemap.xml'
-    assert results[0][1] == []
 
 
 def test_different_host_record(spark):
@@ -231,3 +215,127 @@ Sitemap: http://3535.ru/sitemap_000.xml
     assert results[0][1] == ['177.52.3535.ru']
 
 
+
+
+def test_host_accumulation_empty(spark):
+    """
+    Test accumulation of hosts when sitemap url host and robots.txt url host match
+    Requires test/ on PYTHONPATH so utils._process_jobs can be imported
+    """
+
+    record = make_robots_txt_record("http://agencasinosbobet5.weebly.com/robots.txt",
+"""Sitemap: http://agencasinosbobet5.weebly.com/sitemap.xml
+
+User-agent: NerdyBot
+Disallow: /
+
+User-agent: *
+Disallow: /ajax/
+Disallow: /apps/
+""")
+    job = SitemapExtractorJob()
+    job.init_accumulators(session=spark)
+
+    records = [record]
+    rdd = spark.sparkContext.parallelize(records)
+    _process_jobs_partial = lambda partition_index, records: _process_jobs(partition_index, records, job=job)
+    output = rdd.mapPartitionsWithIndex(_process_jobs_partial)
+    output = output.groupByKey().map(SitemapExtractorJob.reduce_group_by_key_func).collect()
+
+    assert len(output) == 1
+    assert output[0][0] == 'http://agencasinosbobet5.weebly.com/sitemap.xml'
+    assert output[0][1] == []
+
+
+def test_host_accumulation_multi(spark):
+    """
+    Test accumulation of multiple hosts for same sitemap URL from different robots.txt records
+    Requires test/ on PYTHONPATH so utils._process_jobs can be imported
+    """
+
+    multi_robots_txt_data = [
+        (
+            "http://the-mayflower-hotel-autograph-collection-washington.ibooked.com.br/robots.txt",
+            """User-Agent: *
+Allow: /
+Disallow: /reviewpage/
+Disallow: /ajax/
+Disallow: /?page=stat
+Disallow: /?page=hotel_ajax
+Disallow: /?page=hotellist_json
+Disallow: /reviewpage2/
+
+
+User-agent: Yandex
+Host: nochi.com
+Allow: /
+Disallow: /reviewpage/
+
+Disallow: /ajax/
+Disallow: /?page=stat
+Disallow: /?page=hotel_ajax
+Disallow: /?page=hotellist_json
+Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
+"""
+        ),
+        (
+            "http://the-rockies-condominiums-steamboat-springs.booked.net/robots.txt",
+            """User-Agent: *
+Allow: /
+Disallow: /reviewpage/
+Disallow: /ajax/
+Disallow: /?page=stat
+Disallow: /?page=hotel_ajax
+Disallow: /?page=hotellist_json
+Disallow: /reviewpage2/
+
+
+User-agent: Yandex
+Host: nochi.com
+Allow: /
+Disallow: /reviewpage/
+
+Disallow: /ajax/
+Disallow: /?page=stat
+Disallow: /?page=hotel_ajax
+Disallow: /?page=hotellist_json
+Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
+""",
+        ),
+        (
+            "http://hotel-flora-venice.booked.kr/robots.txt",
+            """User-Agent: *
+Allow: /
+Disallow: /reviewpage/
+Disallow: /ajax/
+Disallow: /?page=stat
+Disallow: /?page=hotel_ajax
+Disallow: /?page=hotellist_json
+Disallow: /reviewpage2/
+
+
+User-agent: Yandex
+Host: nochi.com
+Allow: /
+Disallow: /reviewpage/
+
+Disallow: /ajax/
+Disallow: /?page=stat
+Disallow: /?page=hotel_ajax
+Disallow: /?page=hotellist_json
+Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
+"""
+        )
+    ]
+
+    records = [make_robots_txt_record(robots_txt_url, robots_txt_content)
+                for robots_txt_url, robots_txt_content in multi_robots_txt_data]
+    job = SitemapExtractorJob()
+    job.init_accumulators(session=spark)
+    rdd = spark.sparkContext.parallelize(records)
+    _process_jobs_partial = lambda partition_index, records: _process_jobs(partition_index, records, job=job)
+    output = rdd.mapPartitionsWithIndex(_process_jobs_partial)
+    output = output.groupByKey().map(SitemapExtractorJob.reduce_group_by_key_func).collect()
+    assert len(output) == 1
+    assert output[0][0] == 'http://nochi.com/data/sitemaps/ru_index.xml'
+    assert sorted(output[0][1]) == sorted(["the-mayflower-hotel-autograph-collection-washington.ibooked.com.br","the-rockies-condominiums-steamboat-springs.booked.net","hotel-flora-venice.booked.kr"])
