@@ -16,17 +16,16 @@ def spark():
     return SparkSession.builder.appName('test_session').getOrCreate()
 
 
-def make_robots_txt_record(warc_target_uri: str, response_text: str,
-                           response_text_encoding='utf-8',
-                           warc_target_uri_is_invalid=False) -> Mock:
+def make_robots_txt_record(warc_target_uri,
+                           response_bytes) -> Mock:
+    """
+    Create a mock robots.txt WARC record for testing.
+    """
     record = MagicMock()
     record.rec_type = 'response'
-    if warc_target_uri_is_invalid:
-        # Create an invalid URL that will cause urlparse to fail
-        record.rec_headers = {'WARC-Target-URI': warc_target_uri}
-    else:
-        record.rec_headers = {'WARC-Target-URI': warc_target_uri}
-    record.content_stream = lambda: BytesIO(response_text.encode(response_text_encoding))
+    record.rec_headers = {'WARC-Target-URI': warc_target_uri}
+    record.content_stream = lambda: BytesIO(response_bytes)
+
     return record
 
 
@@ -40,14 +39,20 @@ Disallow: /search
 Allow: /
 
 Sitemap: http://ajedrezhoygol.blogspot.com/sitemap.xml
-""")
+""".encode('utf-8'))
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
     assert len(results) == 1
     assert results[0][0] == 'http://ajedrezhoygol.blogspot.com/sitemap.xml'
     assert results[0][1] == ["ajedrezhoygol.blogspot.com.ar"]
-
+    assert job.sitemap_urls_found.value == 1
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.sitemap_url_invalid.value == 0
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_different_host_record(spark):
@@ -212,7 +217,7 @@ Host: 3535.ru
 
 
 Sitemap: http://3535.ru/sitemap_000.xml
-'''
+'''.encode('utf-8')
     )
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
@@ -239,7 +244,7 @@ Disallow: /
 User-agent: *
 Disallow: /ajax/
 Disallow: /apps/
-""")
+""".encode('utf-8'))
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
 
@@ -252,6 +257,13 @@ Disallow: /apps/
     assert len(output) == 1
     assert output[0][0] == 'http://agencasinosbobet5.weebly.com/sitemap.xml'
     assert output[0][1] == '[]'
+    assert job.sitemap_urls_found.value == 1
+    assert job.sitemap_url_invalid.value == 0
+    assert job.sitemap_url_invalid_encoding.value == 0
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_host_accumulation_multi(spark):
@@ -283,7 +295,7 @@ Disallow: /?page=stat
 Disallow: /?page=hotel_ajax
 Disallow: /?page=hotellist_json
 Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
-"""
+""".encode('utf-8')
         ),
         (
             "http://the-rockies-condominiums-steamboat-springs.booked.net/robots.txt",
@@ -307,7 +319,7 @@ Disallow: /?page=stat
 Disallow: /?page=hotel_ajax
 Disallow: /?page=hotellist_json
 Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
-""",
+""".encode('utf-8'),
         ),
         (
             "http://hotel-flora-venice.booked.kr/robots.txt",
@@ -331,7 +343,7 @@ Disallow: /?page=stat
 Disallow: /?page=hotel_ajax
 Disallow: /?page=hotellist_json
 Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
-"""
+""".encode('utf-8')
         )
     ]
 
@@ -346,6 +358,13 @@ Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
     assert len(output) == 1
     assert output[0][0] == 'http://nochi.com/data/sitemaps/ru_index.xml'
     assert sorted(json.loads(output[0][1])) == sorted(["the-mayflower-hotel-autograph-collection-washington.ibooked.com.br","the-rockies-condominiums-steamboat-springs.booked.net","hotel-flora-venice.booked.kr"])
+    assert job.sitemap_urls_found.value == 3
+    assert job.sitemap_url_invalid.value == 0
+    assert job.sitemap_url_invalid_encoding.value == 0
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 3
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 3
 
 
 def test_wrong_encoding_utf16_record(spark):
@@ -358,51 +377,31 @@ Disallow: /search
 Allow: /
 
 Sitemap: http://ajedrezhoygol.blogspot.com/sitemap.xml
-""", response_text_encoding='utf-16')
+""".encode('utf-16'))
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
     assert len(results) == 0
-
-
-def test_robots_txt_invalid_url_malformed(spark):
-    """Test that robots_txt_invalid_url increments when robots.txt URL causes urlparse to fail"""
-    # urlparse will raise AttributeError when given a non-string type in rec_headers
-    # We need to mock the record more carefully to trigger an actual exception
-    record = MagicMock()
-    record.rec_type = 'response'
-    # Pass an integer instead of string to cause AttributeError in urlparse
-    record.rec_headers = {'WARC-Target-URI': 12345}  # Non-string type
-    record.content_stream = lambda: BytesIO(b"""User-agent: *
-Disallow: /
-
-Sitemap: http://example.com/sitemap.xml
-""")
-
-    job = SitemapExtractorJob()
-    job.init_accumulators(session=spark)
-
-    # Mock the logger to avoid serialization issues with Spark's Java logger
-    job.get_logger = lambda: MagicMock()
-
-    results = list(job.process_record(record))
-    # Should return early due to invalid robots.txt URL
-    assert len(results) == 0
-    assert job.robots_txt_invalid_url.value == 1
+    assert job.sitemap_urls_found.value == 0
+    assert job.sitemap_url_invalid.value == 0
+    assert job.sitemap_url_invalid_encoding.value == 0
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 0
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_robots_txt_invalid_url_unparseable_netloc(spark):
-    """Test that robots_txt_invalid_url increments when robots.txt URL is a list"""
-    # Another way to trigger urlparse exception with a non-string type
-    record = MagicMock()
-    record.rec_type = 'response'
-    record.rec_headers = {'WARC-Target-URI': ['http://example.com']}  # List will cause TypeError
-    record.content_stream = lambda: BytesIO(b"""User-agent: *
+    """ Test malformed WARC-Target-URI """
+    record = make_robots_txt_record(
+        warc_target_uri='http://[malformed::url]/robots.txt',
+        response_bytes="""User-agent: *
 Disallow: /admin/
 
-Sitemap: http://valid-example.com/sitemap.xml
-Sitemap: http://valid-example.com/sitemap2.xml
-""")
+Sitemap: http://example.com/sitemap.xml
+Sitemap: http://example.com/sitemap2.xml
+""".encode('utf-8')
+    )
 
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
@@ -411,135 +410,171 @@ Sitemap: http://valid-example.com/sitemap2.xml
     job.get_logger = lambda: MagicMock()
 
     results = list(job.process_record(record))
-    # Should return early due to invalid robots.txt URL
     assert len(results) == 0
     assert job.robots_txt_invalid_url.value == 1
+    assert job.sitemap_urls_found.value == 1
+    assert job.sitemap_url_invalid.value == 0
+    assert job.sitemap_url_invalid_encoding.value == 0
+    assert job.robots_txt_invalid_url.value == 1
+    assert job.robots_txt_announcing_sitemap.value == 0
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_robots_txt_invalid_punycode_url(spark):
-    """Test handling of invalid punycode domain in robots.txt URL"""
-    # xn--foo is an invalid punycode domain (incomplete encoding)
-    # validators.url properly rejects it, so this tests that invalid punycode is caught
+    """ Test invalid punycode in WARC-Target-URI """
     record = make_robots_txt_record("http://xn--foo/robots.txt",
                                     """User-agent: *
 Disallow: /
 
 Sitemap: http://example.com/sitemap.xml
-""")
+""".encode('utf-8'))
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
-    # validators.url properly detects invalid punycode and rejects it
-    # So the robots.txt URL is invalid and no results are returned
     assert len(results) == 0
     assert job.robots_txt_invalid_url.value == 1
+    assert job.sitemap_urls_found.value == 1
+    assert job.sitemap_url_invalid.value == 0
+    assert job.sitemap_url_invalid_encoding.value == 0
+    assert job.robots_txt_invalid_url.value == 1
+    assert job.robots_txt_announcing_sitemap.value == 0
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_sitemap_url_invalid_encoding_latin1(spark):
-    """Test that sitemap_url_invalid_encoding increments for non-UTF8 sitemap URLs"""
-    # Create a robots.txt with a sitemap URL containing Latin-1 bytes that aren't valid UTF-8
+    """ Test incorrectly encoded sitemap URL - latin-1 bytes """
     # The byte sequence \xe9 is é in Latin-1 but invalid in UTF-8 when standalone
-    robots_txt_bytes = b"""User-agent: *
+    record = make_robots_txt_record(
+        warc_target_uri='http://example.com/robots.txt',
+        response_bytes=b"""User-agent: *
 Disallow: /
 
 Sitemap: http://example.com/sitemap_caf\xe9.xml
 """
-    record = MagicMock()
-    record.rec_type = 'response'
-    record.rec_headers = {'WARC-Target-URI': 'http://example.com/robots.txt'}
-    record.content_stream = lambda: BytesIO(robots_txt_bytes)
+    )
 
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
     assert len(results) == 0
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.sitemap_urls_found.value == 1
+    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 1
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_sitemap_url_invalid_encoding_mixed_bytes(spark):
-    """Test that sitemap_url_invalid_encoding increments for mixed invalid byte sequences"""
-    # Create a robots.txt with multiple sitemap URLs, one with invalid UTF-8
+    """ Test incorrectly encoded sitemap URL - mixed UTF-8 invalid bytes """
     # The byte sequence \xff\xfe is not valid UTF-8
-    robots_txt_bytes = b"""User-agent: *
+    record = make_robots_txt_record(
+        warc_target_uri='http://example.com/robots.txt',
+        response_bytes=b"""User-agent: *
 Disallow: /search
 
 Sitemap: http://example.com/good_sitemap.xml
 Sitemap: http://example.com/bad\xff\xfe_sitemap.xml
 Sitemap: http://example.com/another_good.xml
 """
-    record = MagicMock()
-    record.rec_type = 'response'
-    record.rec_headers = {'WARC-Target-URI': 'http://example.com/robots.txt'}
-    record.content_stream = lambda: BytesIO(robots_txt_bytes)
+    )
 
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
-    # Should get 2 valid sitemaps and 1 invalid encoding
     assert len(results) == 2
+    assert results == [
+        ('http://example.com/good_sitemap.xml', ['example.com']),
+        ('http://example.com/another_good.xml', ['example.com'])
+    ]
     assert job.sitemap_url_invalid_encoding.value == 1
     assert job.sitemap_urls_found.value == 3  # All 3 matched the pattern
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.sitemap_url_invalid.value == 0
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
 def test_sitemap_url_invalid_malformed_url(spark):
-    """Test that sitemap_url_invalid increments when sitemap URL causes validation to fail"""
-    robots_txt_bytes = b"""User-agent: *
+    """ Test invalid malformed sitemap URL """
+    record = make_robots_txt_record(
+        warc_target_uri='http://example.com/robots.txt',
+        response_bytes=b"""User-agent: *
 Disallow: /
 
-Sitemap: http://example.com/sitemap.xml
+Sitemap: ht!tp://[malformed::url]/sitemap.xml
 """
-    record = MagicMock()
-    record.rec_type = 'response'
-    record.rec_headers = {'WARC-Target-URI': 'http://example.com/robots.txt'}
-    record.content_stream = lambda: BytesIO(robots_txt_bytes)
+    )
 
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
-
-    # Mock _is_valid_url to return False for sitemap URLs (simulating validation failure)
-    original_is_valid = job._is_valid_url
-    def mock_is_valid(url, label_for_log):
-        if label_for_log == 'sitemap':
-            return False  # Simulate validation failure for sitemap URLs
-        return original_is_valid(url, label_for_log)
-
-    job._is_valid_url = mock_is_valid
-
     results = list(job.process_record(record))
     assert len(results) == 0
     assert job.sitemap_url_invalid.value == 1
     assert job.sitemap_urls_found.value == 1
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
 
-def test_sitemap_url_invalid_unparseable_scheme(spark):
-    """Test that sitemap_url_invalid increments for multiple unparseable sitemap URLs"""
-    robots_txt_bytes = b"""User-agent: *
+def test_sitemap_url_invalid_malformed_url_multi(spark):
+    """ Test multiple sitemap URLs, one invalid """
+    # http://xn--invalid is malformed punycode
+    record = make_robots_txt_record(
+        warc_target_uri='http://example.com/robots.txt',
+        response_bytes=b"""User-agent: *
 Disallow: /admin/
 
-Sitemap: http://valid.com/sitemap1.xml
-Sitemap: http://broken.com/sitemap.xml
-Sitemap: http://valid.com/sitemap2.xml
+Sitemap: http://valid-site.com/sitemap1.xml
+Sitemap: http://xn--invalid/sitemap.xml
+Sitemap: http://another-valid-site.com/sitemap2.xml
 """
-    record = MagicMock()
-    record.rec_type = 'response'
-    record.rec_headers = {'WARC-Target-URI': 'http://example.com/robots.txt'}
-    record.content_stream = lambda: BytesIO(robots_txt_bytes)
+    )
 
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
-
-    # Mock _is_valid_url to return False for specific sitemap URLs
-    original_is_valid = job._is_valid_url
-    def mock_is_valid(url, label_for_log):
-        if label_for_log == 'sitemap' and 'broken.com' in url:
-            return False  # Simulate validation failure for broken.com
-        return original_is_valid(url, label_for_log)
-
-    job._is_valid_url = mock_is_valid
-
     results = list(job.process_record(record))
-    # Should get 2 valid sitemaps and 1 invalid
     assert len(results) == 2
+    assert results == [
+        ('http://valid-site.com/sitemap1.xml', ['example.com']),
+        ('http://another-valid-site.com/sitemap2.xml', ['example.com'])
+    ]
     assert job.sitemap_url_invalid.value == 1
     assert job.sitemap_urls_found.value == 3
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 0
+    assert job.robots_txt_processed.value == 1
 
+
+def test_50_sitemap_urls(spark):
+    """ Test multiple sitemap URLs, one invalid """
+    # http://xn--invalid is malformed punycode
+    record = make_robots_txt_record(
+        warc_target_uri='http://example.com/robots.txt',
+        response_bytes=("""User-agent: *
+Disallow: /admin/
+
+""" + "\n".join(f"Sitemap: http://valid-site.com/sitemap{i}.xml" for i in range(1, 61))
+    ).encode('utf-8'))
+
+    job = SitemapExtractorJob()
+    job.init_accumulators(session=spark)
+    results = list(job.process_record(record))
+    assert len(results) == 60
+    for sitemap_url, host in results:
+        assert sitemap_url.startswith("http://valid-site.com/sitemap")
+        assert host == ["example.com"]
+    assert job.sitemap_url_invalid.value == 0
+    assert job.sitemap_urls_found.value == 60
+    assert job.robots_txt_invalid_url.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_with_more_than_50_sitemaps.value == 1
+    assert job.robots_txt_processed.value == 1
