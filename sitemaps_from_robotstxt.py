@@ -1,8 +1,9 @@
 import json
 import re
 from typing import Optional
-from urllib.parse import urlparse, urljoin, ParseResult
+from urllib.parse import urlparse, urljoin
 
+import validators
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from warcio.recordloader import ArcWarcRecord
 
@@ -92,25 +93,24 @@ class SitemapExtractorJob(CCSparkJob):
                 n_sitemaps += 1
                 try:
                     sitemap_url = sitemap_url.decode("utf-8", "strict")
-                except UnicodeEncodeError:
+                except UnicodeDecodeError:
                     # invalid encoding, ignore
                     self.sitemap_url_invalid_encoding.add(1)
                     continue
 
-                if self._try_parse_url(sitemap_url, label_for_log='sitemap') is None:
+                if not self._is_valid_url(sitemap_url, label_for_log='sitemap'):
                     self.sitemap_url_invalid.add(1)
                     continue
 
                 if url is None:
                     # first sitemap found: set base URL and get host from URL
                     url = record.rec_headers['WARC-Target-URI']
-                    url_parsed = self._try_parse_url(url, label_for_log='robots.txt')
-                    if url_parsed is None:
+                    if not self._is_valid_url(url, label_for_log='robots.txt'):
                         # skip this robots.txt record
                         self.robots_txt_invalid_url.add(1)
                         return
 
-                    host = url_parsed.netloc.lower().lstrip('.')
+                    host = urlparse(url).netloc.lower().lstrip('.')
 
                 if not sitemap_url.startswith('http'):
                     sitemap_url = urljoin(url, sitemap_url)
@@ -124,16 +124,28 @@ class SitemapExtractorJob(CCSparkJob):
             self.robots_txt_with_more_than_50_sitemaps.add(1)
 
 
-    def _try_parse_url(self, url, label_for_log) -> Optional[ParseResult]:
+    def _is_valid_url(self, url, label_for_log) -> bool:
+        """Validate URL using validators.url and log if invalid."""
         try:
-            return urlparse(url)
-        except Exception as url_parse_error:
+            result = validators.url(url)
+            # validators.url returns True for valid URLs, ValidationError for invalid
+            if result is True:
+                return True
+            else:
+                # ValidationError object returned - convert to string for logging
+                try:
+                    self.get_logger().warn('Invalid %s URL: %s - %s', label_for_log, url, str(result))
+                except Exception:
+                    # If logging fails, just continue without logging
+                    pass
+                return False
+        except Exception as e:
             try:
-                self.get_logger().warn('Invalid %s URL: %s - %s', label_for_log, url, url_parse_error)
-            except UnicodeEncodeError as unicode_error:
-                self.get_logger().warn('Invalid %s URL (cannot be displayed): %s - %s',
-                                       label_for_log, url_parse_error, unicode_error)
-            return None
+                self.get_logger().warn('Invalid %s URL: %s - %s', label_for_log, url, str(e))
+            except Exception:
+                # If logging fails, just continue without logging
+                pass
+            return False
 
 
 if __name__ == '__main__':

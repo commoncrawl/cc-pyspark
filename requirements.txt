@@ -5,6 +5,9 @@ ujson
 orjson
 warcio
 
+# for validating URLs in robots.txt:
+validators
+
 # for link extraction and webgraph construction also:
 idna
 
