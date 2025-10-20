@@ -405,10 +405,6 @@ Sitemap: http://example.com/sitemap2.xml
 
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
-
-    # Mock the logger to avoid serialization issues
-    job.get_logger = lambda: MagicMock()
-
     results = list(job.process_record(record))
     assert len(results) == 0
     assert job.robots_txt_invalid_url.value == 1

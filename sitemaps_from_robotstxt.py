@@ -4,6 +4,7 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 
 import validators
+from py4j.protocol import Py4JError
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from warcio.recordloader import ArcWarcRecord
 
@@ -93,8 +94,8 @@ class SitemapExtractorJob(CCSparkJob):
                 n_sitemaps += 1
                 try:
                     sitemap_url = sitemap_url.decode("utf-8", "strict")
-                except UnicodeDecodeError:
-                    # invalid encoding, ignore
+                except UnicodeDecodeError as e:
+                    self.get_logger().warn(f'Invalid encoding of sitemap URL {sitemap_url}: {repr(e)}')
                     self.sitemap_url_invalid_encoding.add(1)
                     continue
 
@@ -126,25 +127,17 @@ class SitemapExtractorJob(CCSparkJob):
 
     def _is_valid_url(self, url, label_for_log) -> bool:
         """Validate URL using validators.url and log if invalid."""
-        try:
-            result = validators.url(url)
-            # validators.url returns True for valid URLs, ValidationError for invalid
-            if result is True:
-                return True
-            else:
-                # ValidationError object returned - convert to string for logging
-                try:
-                    self.get_logger().warn('Invalid %s URL: %s - %s', label_for_log, url, str(result))
-                except Exception:
-                    # If logging fails, just continue without logging
-                    pass
-                return False
-        except Exception as e:
+        result = validators.url(url)
+        # validators.url returns True for valid URLs, ValidationError for invalid
+        if result is True:
+            return True
+        else:
+            validation_error = str(result)
             try:
-                self.get_logger().warn('Invalid %s URL: %s - %s', label_for_log, url, str(e))
-            except Exception:
-                # If logging fails, just continue without logging
-                pass
+                self.get_logger().warn('Invalid {} URL: {} - {}'.format(label_for_log, url, validation_error))
+            except Exception as e:
+                self.get_logger().warn('Invalid {} URL (cannot be displayed): {}'.format(
+                                       label_for_log, repr(e)))
             return False
 
 
