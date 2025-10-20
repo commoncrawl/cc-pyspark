@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Optional
 from urllib.parse import urlparse, urljoin, ParseResult
@@ -14,7 +15,7 @@ class SitemapExtractorJob(CCSparkJob):
 
     output_schema = StructType([
         StructField('sitemap_url', StringType(), True),
-        StructField('hosts', ArrayType(StringType()), True)
+        StructField('hosts', StringType(), True)
     ])
 
     merge_method = 'reduce_group_by_key'
@@ -59,7 +60,14 @@ class SitemapExtractorJob(CCSparkJob):
                 if robots_txt_host != sitemap_host:
                     cross_submit_hosts.add(robots_txt_host)
 
-        return sitemap_uri, list(cross_submit_hosts)
+        return sitemap_uri, json.dumps(list(cross_submit_hosts))
+
+
+    def add_arguments(self, parser):
+        super(SitemapExtractorJob, self).add_arguments(parser)
+        # set output options to match old cc-mrjob output
+        parser.set_defaults(output_option=['sep=\t', 'escapeQuotes=false', 'header=false'])
+        parser.set_defaults(output_format='csv')
 
 
     def process_record(self, record: ArcWarcRecord):
