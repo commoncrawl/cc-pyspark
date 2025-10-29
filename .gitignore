@@ -17,3 +17,4 @@ spark-warehouse/
 # get-data.sh puts data into
 crawl-data/
 input/
+/.pytest_cache/

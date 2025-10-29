@@ -422,9 +422,21 @@ class CCSparkJob(object):
         return record.http_headers.headers
 
     @staticmethod
+    def is_warcinfo_record(record: ArcWarcRecord):
+        """Return true if WARC record is a WARC info record"""
+        return (record.rec_type == 'warcinfo' and
+                record.content_type == 'application/warc-fields')
+
+    @staticmethod
     def is_response_record(record: ArcWarcRecord):
         """Return true if WARC record is a WARC response record"""
         return record.rec_type == 'response'
+
+    @staticmethod
+    def is_metadata_record(record: ArcWarcRecord):
+        """Return true if WARC record is a WARC metadata record"""
+        return (record.record_type == 'metadata' and
+                record.content_type == 'application/warc-fields')
 
     @staticmethod
     def is_wet_text_record(record: ArcWarcRecord):
