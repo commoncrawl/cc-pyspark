@@ -71,8 +71,13 @@ class SitemapExtractorJob(CCSparkJob):
                 if robots_txt_url is None:
                     # first sitemap found: set base URL and get host from URL
                     robots_txt_url = record.rec_headers['WARC-Target-URI']
-                    robots_txt_host = self._try_parse_host(robots_txt_url, label_for_log='robots.txt')
-                    if robots_txt_host is None:
+                    try:
+                        robots_txt_host = urlparse(robots_txt_url).netloc.lower().lstrip('.')
+                    except Exception as e1:
+                        try:
+                            self.get_logger().warn(f'Invalid robots.txt URL: {robots_txt_url} - {repr(e1)}')
+                        except Exception as e2:
+                            self.get_logger().warn(f'Invalid robots.txt URL - {repr(e1)} (cannot display: {repr(e2)})')
                         # skip this entire robots.txt record
                         return
 
@@ -87,16 +92,7 @@ class SitemapExtractorJob(CCSparkJob):
                             self.get_logger().warn(f'Error joining sitemap URL with base - {repr(e)} (cannot display: {repr(log_e)})')
                         continue
 
-                sitemap_host = self._try_parse_host(sitemap_url, label_for_log='sitemap')
-                if sitemap_host is None:
-                    # skip this sitemap URL, continue processing others
-                    continue
-
-                if sitemap_host == robots_txt_host:
-                    # optimization: same host, save us a fetch later
-                    yield sitemap_url, []
-                else:
-                    yield sitemap_url, [robots_txt_host]
+                yield sitemap_url, [robots_txt_host]
                 n_sitemaps += 1
 
         if n_sitemaps > 0:

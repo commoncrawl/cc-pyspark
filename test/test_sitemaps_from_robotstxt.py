@@ -227,7 +227,7 @@ Sitemap: http://3535.ru/sitemap_000.xml
 
 
 
-def test_host_accumulation_empty(spark):
+def test_host_accumulation_same_host(spark):
     """
     Test accumulation of hosts when sitemap url host and robots.txt url host match
     Requires test/ on PYTHONPATH so utils._process_jobs can be imported
@@ -254,7 +254,7 @@ Disallow: /apps/
 
     assert len(output) == 1
     assert output[0][0] == 'http://agencasinosbobet5.weebly.com/sitemap.xml'
-    assert output[0][1] == []
+    assert output[0][1] == ['agencasinosbobet5.weebly.com']
     assert job.sitemap_urls_found.value == 1
     assert job.sitemap_url_invalid_encoding.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
@@ -468,7 +468,7 @@ Sitemap: http://example2.com/another_good.xml
     results = list(job.process_record(record))
     assert len(results) == 2
     assert results == [
-        ('http://example.com/good_sitemap.xml', []),
+        ('http://example.com/good_sitemap.xml', ['example.com']),
         ('http://example2.com/another_good.xml', ['example.com'])
     ]
     assert job.sitemap_url_invalid_encoding.value == 1
