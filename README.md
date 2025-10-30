@@ -28,18 +28,32 @@ Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases 
 
 ## Setup
 
-To develop and test locally, you will need to install
-* Spark, see the [detailed instructions](https://spark.apache.org/docs/latest/), and
-* all required Python modules by running
-```
-pip install -r requirements.txt
-```
-* (optionally, and only if you want to query the columnar index) [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3
+To develop and test locally, you Python>=3.9 and Spark.
+
+#### If Spark is already installed:
+(or if you want full control over your Spark cluster configuration), install only the Python dependencies:
+
+  ```bash
+  pip install -r requirements.txt
+  ```
+  
+  Ensure that `spark-submit` and `pyspark` are on your `$PATH`, or prepend `$SPARK_HOME/bin` when running eg `$SPARK_HOME/bin/spark-submit`. See the [Spark documentation](https://spark.apache.org/docs/latest/) for more information.
+
+#### If you just want to get started quickly with local no-cluster development: 
+
+  ```bash
+  pip install -r requirements.txt
+  pip install -r requirements-pyspark.txt
+  ``` 
+  This will install [the PySpark python package](https://spark.apache.org/docs/latest/api/python/getting_started/index.html), which includes a local/client-only version of Spark, and adds `spark-submit` and `pyspark` to your `$PATH`.
+
+#### To query the columnar index:
+In addition to the above, [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3.
 
 
 ## Compatibility and Requirements
 
-Tested with with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
+Tested with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
 
 
 ## Get Sample Data
@@ -62,11 +76,10 @@ CC-PySpark reads the list of input files from a manifest file. Typically, these 
 
 ### Running locally
 
-First, point the environment variable `SPARK_HOME` to your Spark installation. 
-Then submit a job via
+Spark jobs can be started using `spark-submit` (see [Setup](#setup) above if you have a manual installation of Spark):
 
 ```
-$SPARK_HOME/bin/spark-submit ./server_count.py \
+spark-submit ./server_count.py \
 	--num_output_partitions 1 --log_level WARN \
 	./input/test_warc.txt servernames
 ```
@@ -76,7 +89,7 @@ This will count web server names sent in HTTP response headers for the sample WA
 The output table can be accessed via SparkSQL, e.g.,
 
 ```
-$SPARK_HOME/bin/pyspark
+$ pyspark 
 >>> df = sqlContext.read.parquet("spark-warehouse/servernames")
 >>> for row in df.sort(df.val.desc()).take(10): print(row)
 ... 
@@ -92,11 +105,21 @@ Row(key=u'Apache/2.2.15 (CentOS)', val=827)
 Row(key=u'Apache-Coyote/1.1', val=790)
 ```
 
-But it's also possible to configure a different output format, for example CSV or JSON, see the command-line options.
+But it's also possible to configure a different output format, for example CSV or JSON; pass `--help` on the command line for more details.
 
 See also
 * [running the Spark shell and submitting Spark jobs](https://spark.apache.org/docs/latest/#running-the-examples-and-shell)
 * [PySpark SQL API](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html)
+
+#### Debugging in an IDE
+
+If the `.py` file for the job you want to debug is runnable (i.e. if it has a `if __name__ == "__main__":` line), you can invoke it directly as a Python script without needing to go through spark-submit: 
+
+```bash
+python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames`
+````
+
+Spark will complain if the output directory exists - you may want to add a preprocessing step that deletes the output folder under `spark-warehouse` before each run, eg `rm -rf wpark-warehouse/servernames`.
 
 
 ### Running in Spark cluster over large amounts of data

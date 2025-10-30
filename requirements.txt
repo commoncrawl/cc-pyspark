@@ -34,4 +34,3 @@ lxml
 # testing
 pytest
 pytest-mock
-pyspark==3.5.7
