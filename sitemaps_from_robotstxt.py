@@ -78,7 +78,14 @@ class SitemapExtractorJob(CCSparkJob):
 
                 if not (sitemap_url.startswith('http:') or sitemap_url.startswith('https:')):
                     # sitemap_url is relative; pass straight to urljoin which knows how to handle it correctly
-                    sitemap_url = urljoin(robots_txt_url, sitemap_url)
+                    try:
+                        sitemap_url = urljoin(robots_txt_url, sitemap_url)
+                    except Exception as e:
+                        try:
+                            self.get_logger().warn(f'Error joining sitemap URL {sitemap_url} with base {robots_txt_url}: {repr(e)}')
+                        except Exception as log_e:
+                            self.get_logger().warn(f'Error joining sitemap URL with base - {repr(e)} (cannot display: {repr(log_e)})')
+                        continue
 
                 sitemap_host = self._try_parse_host(sitemap_url, label_for_log='sitemap')
                 if sitemap_host is None:
