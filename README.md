@@ -119,7 +119,7 @@ If the `.py` file for the job you want to debug is runnable (i.e. if it has a `i
 python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames`
 ````
 
-Spark will complain if the output directory exists - you may want to add a preprocessing step that deletes the output folder under `spark-warehouse` before each run, eg `rm -rf wpark-warehouse/servernames`.
+Spark will complain if the output directory exists - you may want to add a preprocessing step that deletes the appropriate subdirectory under `spark-warehouse` before each run, eg `rm -rf wpark-warehouse/servernames`.
 
 
 ### Running in Spark cluster over large amounts of data
