@@ -45,9 +45,9 @@ To develop and test locally, you'll need Python>=3.9 and Spark.
   pip install -r requirements.txt
   pip install -r requirements-pyspark.txt
   ``` 
-  This will install [the PySpark python package](https://spark.apache.org/docs/latest/api/python/getting_started/index.html), which includes a local/client-only version of Spark, and adds `spark-submit` and `pyspark` to your `$PATH`.
+  This will install [the PySpark python package](https://spark.apache.org/docs/latest/api/python/getting_started/index.html), which includes a local/client-only version of Spark and also adds `spark-submit` and `pyspark` to your `$PATH`.
 
-#### To query the columnar index:
+#### If you want to query the columnar index:
 In addition to the above, [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3.
 
 
