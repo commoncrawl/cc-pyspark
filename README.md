@@ -139,7 +139,7 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 All examples show the available command-line options if called with the parameter `--help` or `-h`, e.g.
 ```
-$SPARK_HOME/bin/spark-submit ./server_count.py --help
+spark-submit ./server_count.py --help
 ```
 
 #### Overwriting Spark configuration properties
@@ -149,7 +149,7 @@ There are many [Spark configuration properties](https://spark.apache.org/docs/la
 It's possible to overwrite Spark properties when [submitting the job](https://spark.apache.org/docs/latest/submitting-applications.html):
 
 ```
-$SPARK_HOME/bin/spark-submit \
+spark-submit \
     --conf spark.sql.warehouse.dir=myWareHouseDir \
     ... (other Spark options, flags, config properties) \
     ./server_count.py \
@@ -193,7 +193,7 @@ Please also note that:
 
 Below an example call to count words in 10 WARC records host under the `.is` top-level domain using the `--packages` option:
 ```
-$SPARK_HOME/bin/spark-submit \
+spark-submit \
     --packages org.apache.hadoop:hadoop-aws:3.3.2 \
     ./cc_index_word_count.py \
     --input_base_url s3://commoncrawl/ \
