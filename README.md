@@ -28,7 +28,7 @@ Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases 
 
 ## Setup
 
-To develop and test locally, you Python>=3.9 and Spark.
+To develop and test locally, you'll need Python>=3.9 and Spark.
 
 #### If Spark is already installed:
 (or if you want full control over your Spark cluster configuration), install only the Python dependencies:
