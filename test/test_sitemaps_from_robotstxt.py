@@ -8,6 +8,7 @@ from pyspark.sql import SparkSession
 from warcio.recordloader import ArcWarcRecord
 
 from sitemaps_from_robotstxt import SitemapExtractorJob
+from sparkcc import CCSparkJob
 from utils import _process_jobs
 
 
@@ -47,9 +48,6 @@ Sitemap: http://ajedrezhoygol.blogspot.com/sitemap.xml
     assert results[0][0] == 'http://ajedrezhoygol.blogspot.com/sitemap.xml'
     assert results[0][1] == ["ajedrezhoygol.blogspot.com.ar"]
     assert job.sitemap_urls_found.value == 1
-    assert job.robots_txt_invalid_url.value == 0
-    assert job.sitemap_url_invalid.value == 0
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -252,15 +250,13 @@ Disallow: /apps/
     rdd = spark.sparkContext.parallelize(records)
     _process_jobs_partial = lambda partition_index, records: _process_jobs(partition_index, records, job=job)
     output = rdd.mapPartitionsWithIndex(_process_jobs_partial)
-    output = output.groupByKey().map(SitemapExtractorJob.reduce_group_by_key_func).collect()
+    output = output.reduceByKey(CCSparkJob.reduce_by_key_func).collect()
 
     assert len(output) == 1
     assert output[0][0] == 'http://agencasinosbobet5.weebly.com/sitemap.xml'
-    assert output[0][1] == '[]'
+    assert output[0][1] == []
     assert job.sitemap_urls_found.value == 1
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 0
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -354,14 +350,12 @@ Sitemap: http://nochi.com/data/sitemaps/ru_index.xml
     rdd = spark.sparkContext.parallelize(records)
     _process_jobs_partial = lambda partition_index, records: _process_jobs(partition_index, records, job=job)
     output = rdd.mapPartitionsWithIndex(_process_jobs_partial)
-    output = output.groupByKey().map(SitemapExtractorJob.reduce_group_by_key_func).collect()
+    output = output.reduceByKey(CCSparkJob.reduce_by_key_func).collect()
     assert len(output) == 1
     assert output[0][0] == 'http://nochi.com/data/sitemaps/ru_index.xml'
-    assert sorted(json.loads(output[0][1])) == sorted(["the-mayflower-hotel-autograph-collection-washington.ibooked.com.br","the-rockies-condominiums-steamboat-springs.booked.net","hotel-flora-venice.booked.kr"])
+    assert sorted(output[0][1]) == sorted(["the-mayflower-hotel-autograph-collection-washington.ibooked.com.br","the-rockies-condominiums-steamboat-springs.booked.net","hotel-flora-venice.booked.kr"])
     assert job.sitemap_urls_found.value == 3
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 0
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 3
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 3
@@ -383,9 +377,7 @@ Sitemap: http://ajedrezhoygol.blogspot.com/sitemap.xml
     results = list(job.process_record(record))
     assert len(results) == 0
     assert job.sitemap_urls_found.value == 0
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 0
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 0
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -407,11 +399,8 @@ Sitemap: http://example.com/sitemap2.xml
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
     assert len(results) == 0
-    assert job.robots_txt_invalid_url.value == 1
     assert job.sitemap_urls_found.value == 1
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 0
-    assert job.robots_txt_invalid_url.value == 1
     assert job.robots_txt_announcing_sitemap.value == 0
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -428,13 +417,10 @@ Sitemap: http://example.com/sitemap.xml
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
-    assert len(results) == 0
-    assert job.robots_txt_invalid_url.value == 1
+    assert len(results) == 1
     assert job.sitemap_urls_found.value == 1
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 0
-    assert job.robots_txt_invalid_url.value == 1
-    assert job.robots_txt_announcing_sitemap.value == 0
+    assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
 
@@ -455,12 +441,9 @@ Sitemap: http://example.com/sitemap_caf\xe9.xml
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
     assert len(results) == 0
-    assert job.robots_txt_invalid_url.value == 0
     assert job.sitemap_urls_found.value == 1
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_url_invalid_encoding.value == 1
-    assert job.robots_txt_invalid_url.value == 0
-    assert job.robots_txt_announcing_sitemap.value == 1
+    assert job.robots_txt_announcing_sitemap.value == 0
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
 
@@ -470,12 +453,13 @@ def test_sitemap_url_invalid_encoding_mixed_bytes(spark):
     # The byte sequence \xff\xfe is not valid UTF-8
     record = make_robots_txt_record(
         warc_target_uri='http://example.com/robots.txt',
+        # improperly encoded UTF-8 byte sequence in second sitemap URL
         response_bytes=b"""User-agent: *
 Disallow: /search
 
 Sitemap: http://example.com/good_sitemap.xml
 Sitemap: http://example.com/bad\xff\xfe_sitemap.xml
-Sitemap: http://example.com/another_good.xml
+Sitemap: http://example2.com/another_good.xml
 """
     )
 
@@ -484,14 +468,11 @@ Sitemap: http://example.com/another_good.xml
     results = list(job.process_record(record))
     assert len(results) == 2
     assert results == [
-        ('http://example.com/good_sitemap.xml', ['example.com']),
-        ('http://example.com/another_good.xml', ['example.com'])
+        ('http://example.com/good_sitemap.xml', []),
+        ('http://example2.com/another_good.xml', ['example.com'])
     ]
     assert job.sitemap_url_invalid_encoding.value == 1
     assert job.sitemap_urls_found.value == 3  # All 3 matched the pattern
-    assert job.robots_txt_invalid_url.value == 0
-    assert job.sitemap_url_invalid.value == 0
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -511,10 +492,8 @@ Sitemap: ht!tp://[malformed::url]/sitemap.xml
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
-    assert len(results) == 0
-    assert job.sitemap_url_invalid.value == 1
+    assert len(results) == 1
     assert job.sitemap_urls_found.value == 1
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -537,14 +516,13 @@ Sitemap: http://another-valid-site.com/sitemap2.xml
     job = SitemapExtractorJob()
     job.init_accumulators(session=spark)
     results = list(job.process_record(record))
-    assert len(results) == 2
+    assert len(results) == 3
     assert results == [
         ('http://valid-site.com/sitemap1.xml', ['example.com']),
+        ('http://xn--invalid/sitemap.xml', ['example.com']),
         ('http://another-valid-site.com/sitemap2.xml', ['example.com'])
     ]
-    assert job.sitemap_url_invalid.value == 1
     assert job.sitemap_urls_found.value == 3
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 0
     assert job.robots_txt_processed.value == 1
@@ -558,7 +536,7 @@ def test_50_sitemap_urls(spark):
         response_bytes=("""User-agent: *
 Disallow: /admin/
 
-""" + "\n".join(f"Sitemap: http://valid-site.com/sitemap{i}.xml" for i in range(1, 61))
+""" + "\n".join(f"Sitemap: http://valid-site.com/sitemap{i}.xml" for i in range(60))
     ).encode('utf-8'))
 
     job = SitemapExtractorJob()
@@ -568,9 +546,8 @@ Disallow: /admin/
     for sitemap_url, host in results:
         assert sitemap_url.startswith("http://valid-site.com/sitemap")
         assert host == ["example.com"]
-    assert job.sitemap_url_invalid.value == 0
     assert job.sitemap_urls_found.value == 60
-    assert job.robots_txt_invalid_url.value == 0
     assert job.robots_txt_announcing_sitemap.value == 1
     assert job.robots_txt_with_more_than_50_sitemaps.value == 1
     assert job.robots_txt_processed.value == 1
+

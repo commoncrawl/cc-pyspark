@@ -6,7 +6,6 @@ import re
 
 from io import BytesIO
 from tempfile import SpooledTemporaryFile, TemporaryFile
-from typing import Literal
 
 import boto3
 import botocore
@@ -34,8 +33,6 @@ class CCSparkJob(object):
         StructField("key", StringType(), True),
         StructField("val", LongType(), True)
     ])
-
-    merge_method: Literal['reduce_by_key', 'reduce_group_by_key'] = 'reduce_by_key'
 
     # description of input and output shown by --help
     input_descr = "Path to file listing input paths"
@@ -210,22 +207,12 @@ class CCSparkJob(object):
     def reduce_by_key_func(a, b):
         return a + b
 
-    @staticmethod
-    def reduce_group_by_key_func(kv: tuple):
-        return kv
-
     def run_job(self, session):
         input_data = session.sparkContext.textFile(self.args.input,
                                                    minPartitions=self.args.num_input_partitions)
 
-        output = input_data.mapPartitionsWithIndex(self.process_warcs)
-        #self.get_logger().warning("merge method:", self.merge_method)
-        if self.merge_method == 'reduce_group_by_key':
-            output = output.groupByKey().map(self.reduce_group_by_key_func)
-        elif self.merge_method == 'reduce_by_key':
-            output = output.reduceByKey(self.reduce_by_key_func)
-        else:
-            raise ValueError(f"Unknown merge method: {self.merge_method}")
+        output = input_data.mapPartitionsWithIndex(self.process_warcs) \
+            .reduceByKey(self.reduce_by_key_func)
 
         session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
@@ -621,13 +608,8 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             columns.append('content_charset')
         warc_recs = sqldf.select(*columns).rdd
 
-        output = warc_recs.mapPartitions(self.fetch_process_warc_records)
-        if self.merge_method == 'reduce_group_by_key':
-            output = output.groupByKey().map(self.reduce_group_by_key_func)
-        elif self.merge_method == 'reduce_by_key':
-            output = output.reduceByKey(self.reduce_by_key_func)
-        else:
-            raise ValueError(f"Unknown merge method: {self.merge_method}")
+        output = warc_recs.mapPartitions(self.fetch_process_warc_records) \
+            .reduceByKey(self.reduce_by_key_func)
 
         session.createDataFrame(output, schema=self.output_schema) \
             .coalesce(self.args.num_output_partitions) \
