@@ -1,10 +1,6 @@
-import json
 import re
-from typing import Optional
 from urllib.parse import urlparse, urljoin
 
-import validators
-from py4j.protocol import Py4JError
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from warcio.recordloader import ArcWarcRecord
 
@@ -28,6 +24,21 @@ class SitemapExtractorJob(CCSparkJob):
     sitemap_url_invalid_encoding = None
     robots_txt_announcing_sitemap = None
     robots_txt_with_more_than_50_sitemaps = None
+
+
+    def log_accumulators(self, session):
+        super(SitemapExtractorJob, self).log_accumulators(session)
+
+        self.log_accumulator(session, self.robots_txt_processed,
+                             'robots.txt successfully parsed = {}')
+        self.log_accumulator(session, self.sitemap_urls_found,
+                             'sitemap urls found = {}')
+        self.log_accumulator(session, self.sitemap_url_invalid_encoding,
+                             'sitemap urls with invalid utf-8 encoding = {}')
+        self.log_accumulator(session, self.robots_txt_announcing_sitemap,
+                             'robots.txt announcing at least 1 sitemap = {}')
+        self.log_accumulator(session, self.robots_txt_with_more_than_50_sitemaps,
+                             'robots.txt with more than 50 sitemaps = {}')
 
 
     def init_accumulators(self, session):
@@ -70,7 +81,7 @@ class SitemapExtractorJob(CCSparkJob):
 
                 if robots_txt_url is None:
                     # first sitemap found: set base URL and get host from URL
-                    robots_txt_url = record.rec_headers['WARC-Target-URI']
+                    robots_txt_url = self.get_warc_header(record, 'WARC-Target-URI')
                     try:
                         robots_txt_host = urlparse(robots_txt_url).netloc.lower().lstrip('.')
                     except Exception as e1:

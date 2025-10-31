@@ -139,7 +139,7 @@ Spark will complain if the output directory exists - you may want to add a prepr
 
 > If you have manually installed Spark you'll need to ensure the pyspark package is on your PYTHONPATH: 
 > ```bash
-> PYTHONPATH=$SPARK_HOME/python python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames
+> PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames
 > ```
 
 Note that the `run_job` code is still invoked by the Spark Java binary behind the scenes, which normally prevents a debugger from attaching. To debug the `run_job` internals, it's recommended to set up a unit test and debug that; see `test/test_sitemaps_from_robotstxt` for examples of single and batched job tests.
@@ -261,13 +261,13 @@ However, it's recommended that you carefully verify that your custom job impleme
 To run the tests in `test/` you will need to add `.` and `test` to the PYTHONPATH:
 
 ```bash
-PYTHONPATH=.:test pytest -v test
+PYTHONPATH=$PYTHONPATH:.:test pytest -v test
 ```
 
 or if you have a manual installation of Spark:
 
 ```bash
-PYTHONPATH=$SPARK_HOME/python:.:test pytest -v test
+PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python:.:test pytest -v test
 ```
 
 

@@ -24,7 +24,8 @@ def make_robots_txt_record(warc_target_uri,
     """
     record = MagicMock()
     record.rec_type = 'response'
-    record.rec_headers = {'WARC-Target-URI': warc_target_uri}
+    # mock rec_headers.get_header('WARC-Target-URI')
+    record.rec_headers.get_header = lambda key, default: warc_target_uri if key == 'WARC-Target-URI' else default
     record.content_stream = lambda: BytesIO(response_bytes)
 
     return record

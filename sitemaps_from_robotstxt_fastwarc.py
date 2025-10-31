@@ -14,3 +14,7 @@ class SitemapExtractorFastWarcJob(SitemapExtractorJob, CCFastWarcSparkJob):
     fastwarc_record_filter = WarcRecordType.response
 
     # process_record is implemented by SitemapExtractorJob
+
+if __name__ == '__main__':
+    job = SitemapExtractorFastWarcJob()
+    job.run()
