@@ -140,7 +140,9 @@ Spark will complain if the output directory exists - you may want to add a prepr
 > If you have manually installed Spark you'll need to ensure the pyspark package is on your PYTHONPATH: 
 > ```bash
 > PYTHONPATH=$SPARK_HOME/python python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames
-? ```
+> ```
+
+Note that the `run_job` code is still invoked by the Spark Java binary behind the scenes, which normally prevents a debugger from attaching. To debug the `run_job` internals, it's recommended to set up a unit test and debug that; see `test/test_sitemaps_from_robotstxt` for examples of single and batched job tests.
 
 
 ### Running in Spark cluster over large amounts of data
