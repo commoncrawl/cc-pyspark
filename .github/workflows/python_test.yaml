@@ -26,11 +26,11 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        pip install -r requirements-pyspark.txt
+        pip install pyspark==3.5.7
 
     - name: Run tests
       run: |
         python -m pytest . -v
       env:
-        # pyspark needs this to find the test files
+        # PySpark needs this to find the test files
         PYTHONPATH: test
