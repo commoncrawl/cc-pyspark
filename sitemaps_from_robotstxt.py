@@ -84,11 +84,8 @@ class SitemapExtractorJob(CCSparkJob):
                     robots_txt_url = self.get_warc_header(record, 'WARC-Target-URI')
                     try:
                         robots_txt_host = urlparse(robots_txt_url).netloc.lower().lstrip('.')
-                    except Exception as e1:
-                        try:
-                            self.get_logger().warn(f'Invalid robots.txt URL: {robots_txt_url} - {repr(e1)}')
-                        except Exception as e2:
-                            self.get_logger().warn(f'Invalid robots.txt URL - {repr(e1)} (cannot display: {repr(e2)})')
+                    except Exception as e:
+                        self.get_logger().warn(f'Invalid robots.txt URL: {robots_txt_url}: {repr(e)}')
                         # skip this entire robots.txt record
                         return
 
@@ -97,10 +94,7 @@ class SitemapExtractorJob(CCSparkJob):
                     try:
                         sitemap_url = urljoin(robots_txt_url, sitemap_url)
                     except Exception as e:
-                        try:
-                            self.get_logger().warn(f'Error joining sitemap URL {sitemap_url} with base {robots_txt_url}: {repr(e)}')
-                        except Exception as log_e:
-                            self.get_logger().warn(f'Error joining sitemap URL with base - {repr(e)} (cannot display: {repr(log_e)})')
+                        self.get_logger().warn(f'Error joining sitemap URL {sitemap_url} with base {robots_txt_url}: {repr(e)}')
                         continue
 
                 yield sitemap_url, [robots_txt_host]
@@ -111,16 +105,6 @@ class SitemapExtractorJob(CCSparkJob):
             if n_sitemaps > 50:
                 self.robots_txt_with_more_than_50_sitemaps.add(1)
 
-
-    def _try_parse_host(self, url: str, label_for_log: str) -> str|None:
-        try:
-            return urlparse(url).netloc.lower().lstrip('.')
-        except Exception as e:
-            try:
-                self.get_logger().warn(f'Invalid {label_for_log} URL: {url} - {repr(e)}')
-            except Exception as log_e:
-                self.get_logger().warn(f'Invalid {label_for_log} URL - {repr(e)} (cannot display: {repr(log_e)})')
-            return None
 
 
 if __name__ == '__main__':
