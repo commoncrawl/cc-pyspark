@@ -4,27 +4,27 @@
 
 This project provides examples how to process the Common Crawl dataset with [Apache Spark](https://spark.apache.org/) and Python:
 
-+ [count HTML tags](./html_tag_count.py) in Common Crawl's raw response data (WARC files)
++ [count HTML tags](src/cc_pyspark/html_tag_count.py) in Common Crawl's raw response data (WARC files)
 
-+ [count web server names](./server_count.py) in Common Crawl's metadata (WAT files or WARC files)
++ [count web server names](src/cc_pyspark/server_count.py) in Common Crawl's metadata (WAT files or WARC files)
 
-+ list host names and corresponding [IP addresses](./server_ip_address.py) (WAT files or WARC files)
++ list host names and corresponding [IP addresses](src/cc_pyspark/server_ip_address.py) (WAT files or WARC files)
 
-+ [word count](./word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
++ [word count](src/cc_pyspark/word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
 
-+ [extract links](./wat_extract_links.py) from WAT files and [construct the (host-level) web graph](./hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
++ [extract links](src/cc_pyspark/wat_extract_links.py) from WAT files and [construct the (host-level) web graph](src/cc_pyspark/hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
 
 + work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](https://github.com/commoncrawl/cc-index-table) and the notes about [querying the columnar index](#querying-the-columnar-index)):
 
-  - run a SQL query and [export the result as a table](./cc_index_export.py)
+  - run a SQL query and [export the result as a table](src/cc_pyspark/cc_index_export.py)
 
-  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](./cc_index_word_count.py). Alternatively, the first step (query the columnar index) can be executed using Amazon Athena. The list of WARC record coordinates (CSV or a table created by a CTAS statement) is then passed via `--csv` or `--input_table_format`) to the Spark job.
+  - select WARC records by a SQL query, parse the HTML, extract the text and [count words](src/cc_pyspark/cc_index_word_count.py). Alternatively, the first step (query the columnar index) can be executed using Amazon Athena. The list of WARC record coordinates (CSV or a table created by a CTAS statement) is then passed via `--csv` or `--input_table_format`) to the Spark job.
 
 Further information about the examples and available options is shown via the [command-line option](#command-line-options) `--help`.
 
 ## Implementing a Custom Extractor
 
-Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases it is sufficient to override a single method (`process_record`). Have a look at one of the examples, e.g. to [count HTML tags](./html_tag_count.py).
+Extending the [CCSparkJob](src/cc_pyspark/sparkcc.py) isn't difficult and for many use cases it is sufficient to override a single method (`process_record`). Have a look at one of the examples, e.g. to [count HTML tags](src/cc_pyspark/html_tag_count.py).
 
 ## Setup
 
@@ -88,7 +88,7 @@ Note that the sample data is from an older crawl (`CC-MAIN-2017-13` run in March
 
 ## Process Common Crawl Data on Spark
 
-CC-PySpark reads the list of input files from a manifest file. Typically, these are Common Crawl WARC, WAT or WET files, but it could be any other type of file, as long it is supported by the class implementing [CCSparkJob](./sparkcc.py). The files can be given as absolute URLs or as paths relative to a base URL (option `--input_base_url`). The URL cat point to a local file (`file://`), to a remote location (typically below `s3://commoncrawl/` resp. `https://data.commoncrawl.org/`). For development and testing, you'd start with local files.
+CC-PySpark reads the list of input files from a manifest file. Typically, these are Common Crawl WARC, WAT or WET files, but it could be any other type of file, as long it is supported by the class implementing [CCSparkJob](src/cc_pyspark/sparkcc.py). The files can be given as absolute URLs or as paths relative to a base URL (option `--input_base_url`). The URL cat point to a local file (`file://`), to a remote location (typically below `s3://commoncrawl/` resp. `https://data.commoncrawl.org/`). For development and testing, you'd start with local files.
 
 ### Running locally
 
@@ -248,10 +248,10 @@ Alternatively, it's possible configure the table schema explicitly:
 Replacing [FastWARC](https://resiliparse.chatnoir.eu/en/latest/man/fastwarc.html) can speed up job execution by 25% if little custom computations are done and most of the time is spent for parsing WARC files.
 
 To use FastWARC
-- the job class must inherit from [CCFastWarcSparkJob](./sparkcc_fastwarc.py) instead of [CCSparkJob](./sparkcc.py). See [ServerCountFastWarcJob](./server_count_fastwarc.py) for an example.
+- the job class must inherit from [CCFastWarcSparkJob](src/cc_pyspark/sparkcc_fastwarc.py) instead of [CCSparkJob](src/cc_pyspark/sparkcc.py). See [ServerCountFastWarcJob](src/cc_pyspark/server_count_fastwarc.py) for an example.
 - when running the job in a Spark cluster, `sparkcc_fastwarc.py` must be passed via `--py-files` in addition to `sparkcc.py` and further job-specific Python files. See also [running in a Spark cluster](#running-in-spark-cluster-over-large-amounts-of-data).
 
-Some differences between the warcio and FastWARC APIs are hidden from the user in methods implemented in [CCSparkJob](./sparkcc.py) and [CCFastWarcSparkJob](./sparkcc_fastwarc.py) respectively. These methods allow to access WARC or HTTP headers and the payload stream in a unique way, regardless of whether warcio or FastWARC are used.
+Some differences between the warcio and FastWARC APIs are hidden from the user in methods implemented in [CCSparkJob](src/cc_pyspark/sparkcc.py) and [CCFastWarcSparkJob](src/cc_pyspark/sparkcc_fastwarc.py) respectively. These methods allow to access WARC or HTTP headers and the payload stream in a unique way, regardless of whether warcio or FastWARC are used.
 
 However, it's recommended that you carefully verify that your custom job implementation works in combination with FastWARC. There are subtle differences between the warcio and FastWARC APIs, including the underlying classes (WARC/HTTP headers and stream implementations). In addition, FastWARC does not support for legacy ARC files and does not automatically decode HTTP content and transfer encodings (see [Resiliparse HTTP Tools](https://resiliparse.chatnoir.eu/en/latest/man/parse/http.html#read-chunked-http-payloads)). While content and transfer encodings are already decoded in Common Crawl WARC files, this may not be the case for WARC files from other sources. See also [WARC 1.1 specification, http/https response records](https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#http-and-https-schemes).
 
