@@ -69,7 +69,7 @@ This will install v3.5.7 of [the PySpark python package](https://spark.apache.or
 
 Install Spark if (see the [Spark documentation](https://spark.apache.org/docs/latest/) for guidance). Then, ensure that `spark-submit` and `pyspark` are on your `$PATH`, or prepend `$SPARK_HOME/bin` when running eg `$SPARK_HOME/bin/spark-submit`.
 
-> Note: The PySpark package is required if you want to run the tests in `test/`. 
+> Note: The PySpark package and "py4j" are required if you want to run the tests in `test/`. The packages are also included in Spark installations at `$SPARK_HOME/python` resp. `$SPARK_HOME/python/lib/py4j-*-src.zip`.
 
 ## Compatibility and Requirements
 
@@ -159,7 +159,10 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 3. don't forget to deploy all dependencies in the cluster, see [advanced dependency management](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management)
 
-4. also the the file `sparkcc.py` needs to be deployed or added as argument `--py-files sparkcc.py` to `spark-submit`. Note: some of the examples require further Python files as dependencies.
+4. also the the file `sparkcc.py` needs to be deployed or added as argument `--py-files sparkcc.py` to `spark-submit`. Note: several of the examples require further Python files as dependencies.
+
+
+The script [run_ccpyspark_job_hadoop.sh](./run_ccpyspark_job_hadoop.sh) shows an example how to run a Spark job on a Hadoop cluster (Spark on YARN). Please, do not forget to adapt this script to your needs.
 
 
 ### Command-line options
