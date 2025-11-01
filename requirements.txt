@@ -27,3 +27,7 @@ lxml
 #Resiliparse
 # (tested with)
 #Resiliparse==0.15.2
+
+# testing
+pytest
+pytest-mock

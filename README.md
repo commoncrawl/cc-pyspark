@@ -28,18 +28,48 @@ Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases 
 
 ## Setup
 
-To develop and test locally, you will need to install
-* Spark, see the [detailed instructions](https://spark.apache.org/docs/latest/), and
-* all required Python modules by running
+To develop and test locally, you'll need **Python>=3.9** and **Spark**. 
+
+### JRE
+
+Spark requires a 64-bit Java JRE (v8, 11, or 17 for Spark 3.5.7). Install this first. If you have an Apple Silicon device, Azul Zulu JRE is recommended for native architecture support. Ensure that either `java` is on your `$PATH` or the `$JAVA_HOME` env var points to your JRE.
+
+### Python dependencies
+
+Assuming you have Python already setup and a venv activated, install the `cc-pyspark` dependencies:
+
 ```
 pip install -r requirements.txt
 ```
-* (optionally, and only if you want to query the columnar index) [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3
 
+#### If you want to query the columnar index:
+In addition to the above, [install S3 support libraries](#installation-of-s3-support-libraries) so that Spark can load the columnar index from S3.
+
+### Spark
+
+There are two ways to obtain Spark:
+* manual installation / preinstallation
+* as a pip package with `pip install`
+
+#### For simple development or to get started quickly, the `pip install` route is recommended:
+
+```bash
+pip install pyspark==3.5.7
+``` 
+
+This will install v3.5.7 of [the PySpark python package](https://spark.apache.org/docs/latest/api/python/getting_started/index.html), which includes a local/client-only version of Spark and also adds `spark-submit` and `pyspark` to your `$PATH`. 
+
+> If you need to interact with a remote Spark cluster, use a version of PySpark that matches the cluster version.
+
+#### If Spark is already installed or if you want full tooling to configure a local Spark cluster:
+
+Install Spark if (see the [Spark documentation](https://spark.apache.org/docs/latest/) for guidance). Then, ensure that `spark-submit` and `pyspark` are on your `$PATH`, or prepend `$SPARK_HOME/bin` when running eg `$SPARK_HOME/bin/spark-submit`.
+
+> Note: The PySpark package is required if you want to run the tests in `test/`. 
 
 ## Compatibility and Requirements
 
-Tested with with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
+Tested with Spark 3.2.3, 3.3.2, 3.4.1, 3.5.5 in combination with Python 3.8, 3.9, 3.10, 3.12 and 3.13. See the branch [python-2.7](/commoncrawl/cc-pyspark/tree/python-2.7) if you want to run the job on Python 2.7 and older Spark versions.
 
 
 ## Get Sample Data
@@ -62,11 +92,10 @@ CC-PySpark reads the list of input files from a manifest file. Typically, these 
 
 ### Running locally
 
-First, point the environment variable `SPARK_HOME` to your Spark installation. 
-Then submit a job via
+Spark jobs can be started using `spark-submit` (see [Setup](#setup) above if you have a manual installation of Spark):
 
 ```
-$SPARK_HOME/bin/spark-submit ./server_count.py \
+spark-submit ./server_count.py \
 	--num_output_partitions 1 --log_level WARN \
 	./input/test_warc.txt servernames
 ```
@@ -76,7 +105,7 @@ This will count web server names sent in HTTP response headers for the sample WA
 The output table can be accessed via SparkSQL, e.g.,
 
 ```
-$SPARK_HOME/bin/pyspark
+$ pyspark 
 >>> df = sqlContext.read.parquet("spark-warehouse/servernames")
 >>> for row in df.sort(df.val.desc()).take(10): print(row)
 ... 
@@ -92,11 +121,28 @@ Row(key=u'Apache/2.2.15 (CentOS)', val=827)
 Row(key=u'Apache-Coyote/1.1', val=790)
 ```
 
-But it's also possible to configure a different output format, for example CSV or JSON, see the command-line options.
+But it's also possible to configure a different output format, for example CSV or JSON; pass `--help` on the command line for more details.
 
 See also
 * [running the Spark shell and submitting Spark jobs](https://spark.apache.org/docs/latest/#running-the-examples-and-shell)
 * [PySpark SQL API](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html)
+
+#### Debugging in an IDE
+
+If the `.py` file for the job you want to debug is runnable (i.e. if it has a `if __name__ == "__main__":` line), you can bypass `spark-submit` and run it directly as a Python script: 
+
+```bash
+python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames`
+````
+
+Spark will complain if the output directory exists - you may want to add a preprocessing step that deletes the appropriate subdirectory under `spark-warehouse` before each run, eg `rm -rf wpark-warehouse/servernames`.
+
+> If you have manually installed Spark you'll need to ensure the pyspark package is on your PYTHONPATH: 
+> ```bash
+> PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python python server_count.py --num_output_partitions 1 ./input/test_warc.txt servernames
+> ```
+
+Note that the `run_job` code is still invoked by the Spark Java binary behind the scenes, which normally prevents a debugger from attaching. To debug the `run_job` internals, it's recommended to set up a unit test and debug that; see `test/test_sitemaps_from_robotstxt` for examples of single and batched job tests.
 
 
 ### Running in Spark cluster over large amounts of data
@@ -116,7 +162,7 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 All examples show the available command-line options if called with the parameter `--help` or `-h`, e.g.
 ```
-$SPARK_HOME/bin/spark-submit ./server_count.py --help
+spark-submit ./server_count.py --help
 ```
 
 #### Overwriting Spark configuration properties
@@ -126,7 +172,7 @@ There are many [Spark configuration properties](https://spark.apache.org/docs/la
 It's possible to overwrite Spark properties when [submitting the job](https://spark.apache.org/docs/latest/submitting-applications.html):
 
 ```
-$SPARK_HOME/bin/spark-submit \
+spark-submit \
     --conf spark.sql.warehouse.dir=myWareHouseDir \
     ... (other Spark options, flags, config properties) \
     ./server_count.py \
@@ -170,7 +216,7 @@ Please also note that:
 
 Below an example call to count words in 10 WARC records host under the `.is` top-level domain using the `--packages` option:
 ```
-$SPARK_HOME/bin/spark-submit \
+spark-submit \
     --packages org.apache.hadoop:hadoop-aws:3.3.2 \
     ./cc_index_word_count.py \
     --input_base_url s3://commoncrawl/ \
@@ -208,6 +254,21 @@ To use FastWARC
 Some differences between the warcio and FastWARC APIs are hidden from the user in methods implemented in [CCSparkJob](./sparkcc.py) and [CCFastWarcSparkJob](./sparkcc_fastwarc.py) respectively. These methods allow to access WARC or HTTP headers and the payload stream in a unique way, regardless of whether warcio or FastWARC are used.
 
 However, it's recommended that you carefully verify that your custom job implementation works in combination with FastWARC. There are subtle differences between the warcio and FastWARC APIs, including the underlying classes (WARC/HTTP headers and stream implementations). In addition, FastWARC does not support for legacy ARC files and does not automatically decode HTTP content and transfer encodings (see [Resiliparse HTTP Tools](https://resiliparse.chatnoir.eu/en/latest/man/parse/http.html#read-chunked-http-payloads)). While content and transfer encodings are already decoded in Common Crawl WARC files, this may not be the case for WARC files from other sources. See also [WARC 1.1 specification, http/https response records](https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#http-and-https-schemes).
+
+
+## Running the Tests
+
+To run the tests in `test/` you will need to add `.` and `test` to the PYTHONPATH:
+
+```bash
+PYTHONPATH=$PYTHONPATH:.:test pytest -v test
+```
+
+or if you have a manual installation of Spark:
+
+```bash
+PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python:.:test pytest -v test
+```
 
 
 ## Credits
