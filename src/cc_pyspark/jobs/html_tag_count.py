@@ -2,7 +2,7 @@ import re
 
 from collections import Counter
 
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 
 
 class TagCountJob(CCSparkJob):

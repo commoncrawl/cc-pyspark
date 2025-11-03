@@ -1,6 +1,6 @@
 from collections import Counter
 
-from sparkcc import CCIndexWarcSparkJob
+from cc_pyspark.sparkcc import CCIndexWarcSparkJob
 from word_count import WordCountJob
 
 

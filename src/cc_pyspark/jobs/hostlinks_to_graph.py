@@ -2,7 +2,7 @@ import idna
 import logging
 import os
 
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 from pyspark.sql import functions as sqlf
 from pyspark.sql.types import BooleanType, LongType, StringType, StructField, StructType
 

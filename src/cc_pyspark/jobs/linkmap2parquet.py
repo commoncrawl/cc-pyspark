@@ -1,4 +1,4 @@
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 from pyspark.sql.types import StructType, StructField, StringType
 
 

@@ -4,7 +4,7 @@ from urllib.parse import urlparse, urljoin
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from warcio.recordloader import ArcWarcRecord
 
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 
 class SitemapExtractorJob(CCSparkJob):
     """Extract sitemap URLs (http://www.sitemaps.org/) from robots.txt WARC files."""

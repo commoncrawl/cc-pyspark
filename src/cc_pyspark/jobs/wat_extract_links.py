@@ -6,7 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType
 
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 from src.cc_pyspark.json_importer import json
 
 

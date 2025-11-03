@@ -1,5 +1,5 @@
-from sparkcc import CCSparkJob
-from json_importer import json
+from cc_pyspark.sparkcc import CCSparkJob
+from cc_pyspark.json_importer import json
 
 
 class ServerCountJob(CCSparkJob):

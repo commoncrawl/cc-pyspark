@@ -17,7 +17,6 @@ dependencies = [
     "requests>=2.32.5",
     "ujson>=5.11.0",
     "warcio>=1.7.5",
-    "pyspark==3.5.7",
 ]
 [tool.pytest.ini_options]
 pythonpath = [
