@@ -1,6 +1,6 @@
 [project]
 name = "cc-pyspark"
-version = "0.1.0"
+version = "0.1.0-dev0"
 description = "Common Crawl data processing examples for PySpark."
 readme = "README.md"
 license = {text = "MIT"}
