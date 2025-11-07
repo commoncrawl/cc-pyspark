@@ -5,7 +5,7 @@ import os
 import re
 
 from io import BytesIO
-from tempfile import SpooledTemporaryFile, TemporaryFile
+from tempfile import SpooledTemporaryFile, TemporaryFile, NamedTemporaryFile
 
 import boto3
 import botocore
@@ -24,7 +24,9 @@ LOGGING_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 class CCSparkJob(object):
     """
     A simple Spark job definition to process Common Crawl data
-    (WARC/WAT/WET files using Spark and warcio)
+    (WARC/WAT/WET files) using Spark and warcio. The list of input files
+    is read from a manifest file, typically one of the WARC/WAT/WET path
+    listings.
     """
 
     name = 'CCSparkJob'
@@ -56,7 +58,7 @@ class CCSparkJob(object):
     s3client = None
 
     # pattern to split a data URL (<scheme>://<netloc>/<path> or <scheme>:/<path>)
-    data_url_pattern = re.compile('^(s3|https?|file|hdfs):(?://([^/]*))?/(.*)')
+    data_url_pattern = re.compile('^(s3[an]?|https?|file|hdfs):(?://([^/]*))?/(.*)')
 
 
     def parse_arguments(self):
@@ -120,8 +122,8 @@ class CCSparkJob(object):
     def add_arguments(self, parser):
         """Allows derived classes to add command-line arguments.
            Derived classes overriding this method must call
-           super().add_arguments(parser) in order to add "register"
-           arguments from all classes in the hierarchy."""
+           super().add_arguments(parser) in order to "register"
+           arguments from all classes in the class hierarchy."""
         pass
 
     def validate_arguments(self, args):
@@ -229,9 +231,37 @@ class CCSparkJob(object):
             self.s3client = boto3.client('s3', use_ssl=False)
         return self.s3client
 
-    def fetch_warc(self, uri, base_uri=None, offset=-1, length=-1):
-        """Fetch WARC/WAT/WET files (or a record if offset and length are given)"""
+    def verify_s3_location(self, bucketname, path, uri):
+        """Verify a location on S3: return the normalized path
+        (the S3 object key name) or None if verification fails."""
+        if not bucketname:
+            self.get_logger().error("Invalid S3 URI: " + uri)
+            return None
+        if not path:
+            self.get_logger().error("Empty S3 path: " + uri)
+            return None
+        if path[0] == '/':
+            # must strip leading `/` in S3 path
+            path = path[1:]
+        return path
 
+    def convert_file_uri_to_path(self, scheme, path, uri):
+        """Convert a file:// URI into an absolute file path.
+        A relative URI is considered as file path relative
+        to the script's directory.'"""
+        if scheme == 'file':
+            # must be an absolute path
+            return os.path.join('/', path)
+        else:
+            # assume a relative path
+            base_dir = os.path.abspath(os.path.dirname(__file__))
+            return os.path.join(base_dir, uri)
+
+    def resolve_split_uri(self, uri, base_uri=None):
+        """Resolve relative URIs using the provided base URI and
+        split the resolved URI into scheme, netloc, and path.
+        Returns a tuple of (resolved_uri, scheme, netloc, path).
+        """
         (scheme, netloc, path) = (None, None, None)
         uri_match = self.data_url_pattern.match(uri)
         if not uri_match and base_uri:
@@ -244,24 +274,24 @@ class CCSparkJob(object):
         else:
             # keep local file paths as is
             path = uri
+        return (uri, scheme, netloc, path)
+
+    def fetch_warc(self, uri, base_uri=None, offset=-1, length=-1):
+        """Fetch WARC/WAT/WET files (or a record if offset and length are given)"""
+
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
 
         stream = None
 
-        if scheme == 's3':
+        if scheme in ['s3', 's3a', 's3n']:
             bucketname = netloc
-            if not bucketname:
-                self.get_logger().error("Invalid S3 URI: " + uri)
-                return
+            path = self.verify_s3_location(bucketname, path, uri)
             if not path:
-                self.get_logger().error("Empty S3 path: " + uri)
                 return
-            elif path[0] == '/':
-                # must strip leading / in S3 path
-                path = path[1:]
             if offset > -1 and length > 0:
                 rangereq = 'bytes={}-{}'.format(offset, (offset+length-1))
                 # Note: avoid logging too many small fetches
-                #self.get_logger().debug('Fetching {} ({})'.format(uri, rangereq))
+                self.get_logger().debug('Fetching {} ({})'.format(uri, rangereq))
                 try:
                     response = self.get_s3_client().get_object(Bucket=bucketname,
                                                                Key=path,
@@ -294,7 +324,7 @@ class CCSparkJob(object):
                     "Range": "bytes={}-{}".format(offset, (offset + length - 1))
                 }
                 # Note: avoid logging many small fetches
-                #self.get_logger().debug('Fetching {} ({})'.format(uri, headers))
+                self.get_logger().debug('Fetching %s (%s)', uri, headers)
             else:
                 self.get_logger().info('Fetching {}'.format(uri))
             response = requests.get(uri, headers=headers)
@@ -322,13 +352,9 @@ class CCSparkJob(object):
                 self.warc_input_failed.add(1)
 
         else:
+            # local file or file:// URI
             self.get_logger().info('Reading local file {}'.format(uri))
-            if scheme == 'file':
-                # must be an absolute path
-                uri = os.path.join('/', path)
-            else:
-                base_dir = os.path.abspath(os.path.dirname(__file__))
-                uri = os.path.join(base_dir, uri)
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
             try:
                 stream = open(uri, 'rb')
             except IOError as exception:
@@ -396,9 +422,21 @@ class CCSparkJob(object):
         return record.http_headers.headers
 
     @staticmethod
+    def is_warcinfo_record(record: ArcWarcRecord):
+        """Return true if WARC record is a WARC info record"""
+        return (record.rec_type == 'warcinfo' and
+                record.content_type == 'application/warc-fields')
+
+    @staticmethod
     def is_response_record(record: ArcWarcRecord):
         """Return true if WARC record is a WARC response record"""
         return record.rec_type == 'response'
+
+    @staticmethod
+    def is_metadata_record(record: ArcWarcRecord):
+        """Return true if WARC record is a WARC metadata record"""
+        return (record.record_type == 'metadata' and
+                record.content_type == 'application/warc-fields')
 
     @staticmethod
     def is_wet_text_record(record: ArcWarcRecord):
@@ -430,7 +468,7 @@ class CCSparkJob(object):
 
 class CCIndexSparkJob(CCSparkJob):
     """
-    Process the Common Crawl columnar URL index
+    Query Common Crawl's columnar URL index.
     """
 
     name = "CCIndexSparkJob"
@@ -498,7 +536,8 @@ class CCIndexSparkJob(CCSparkJob):
 
 class CCIndexWarcSparkJob(CCIndexSparkJob):
     """
-    Process Common Crawl data (WARC records) found by the columnar URL index
+    Process Common Crawl data (WARC records) found by a query
+    to the columnar URL index.
     """
 
     name = "CCIndexWarcSparkJob"
@@ -620,3 +659,190 @@ class CCIndexWarcSparkJob(CCIndexSparkJob):
             .saveAsTable(self.args.output)
 
         self.log_accumulators(session)
+
+
+class CCFileProcessorSparkJob(CCSparkJob):
+    """
+    A Spark job definition to process any kind of files
+    read from a manifest (as opposed to processing individual WARC records).
+    The class also provides methods to write extra output files,
+    in addition to the default output table.
+    """
+
+    name = 'CCFileProcessor'
+
+    def add_arguments(self, parser):
+        parser.add_argument("--output_base_url", required=False,
+                            help="Base URL to write output files to. Useful if your job "
+                                 "uses write_output_file or check_for_output_file.")
+
+    def log_accumulators(self, session):
+        """Log counters/accumulators, see `init_accumulators`."""
+        self.log_accumulator(session, self.warc_input_processed,
+                             'Input files processed = {}')
+        self.log_accumulator(session, self.warc_input_failed,
+                             'Input files failed = {}')
+
+    def run_job(self, session):
+        input_data = session.sparkContext.textFile(self.args.input,
+                                                   minPartitions=self.args.num_input_partitions)
+
+        output = input_data.mapPartitionsWithIndex(self.process_files) \
+            .reduceByKey(self.reduce_by_key_func)
+
+        session.createDataFrame(output, schema=self.output_schema) \
+            .coalesce(self.args.num_output_partitions) \
+            .write \
+            .format(self.args.output_format) \
+            .option("compression", self.args.output_compression) \
+            .options(**self.get_output_options()) \
+            .saveAsTable(self.args.output)
+
+        self.log_accumulators(session)
+
+    def fetch_file(self, uri, base_uri=None):
+        """
+        Fetch file. This is a modified version of fetch_warc:
+        Applicable to input files of any format, not specialized on WARC files.
+        It uses name temporary files which allows to use external tools that
+        require a file path, cf. the md5sum example tool.
+        """
+
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
+
+        warctemp = None
+
+        if scheme in ['s3', 's3a', 's3n']:
+            bucketname = netloc
+            path = self.verify_s3_location(bucketname, path, uri)
+            if not path:
+                return
+            self.get_logger().info('Reading from S3 {}'.format(uri))
+            # download entire file using a temporary file for buffering
+            warctemp = NamedTemporaryFile(mode='w+b', dir=self.args.local_temp_dir)
+            try:
+                self.get_s3_client().download_fileobj(bucketname, path, warctemp)
+                warctemp.flush()
+                warctemp.seek(0)
+            except botocore.client.ClientError as exception:
+                self.get_logger().error(
+                    'Failed to download {}: {}'.format(uri, exception))
+                warctemp.close()
+                return
+
+        elif scheme == 'http' or scheme == 'https':
+            headers = None
+            self.get_logger().info('Fetching {}'.format(uri))
+            response = requests.get(uri, headers=headers)
+
+            if response.ok:
+                # includes "HTTP 206 Partial Content" for range requests
+                warctemp = NamedTemporaryFile(mode='w+b',
+                                              dir=self.args.local_temp_dir)
+                warctemp.write(response.content)
+                warctemp.flush()
+                warctemp.seek(0)
+            else:
+                self.get_logger().error(
+                    'Failed to download {}: {}'.format(uri, response.status_code))
+                return
+
+        elif scheme == 'hdfs':
+            raise NotImplementedError('HDFS input not implemented')
+
+        else:
+            # local file or file:// URI
+            self.get_logger().info('Reading local file {}'.format(uri))
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
+            try:
+                warctemp = open(uri, 'rb')
+            except Exception as exception:
+                self.get_logger().error(
+                    'Failed to open local file {}: {}'.format(uri, exception))
+                return
+
+        return warctemp
+
+    def process_files(self, _id, iterator):
+        """Process files, calling process_file(...) for each file"""
+        for uri in iterator:
+            tempfd = self.fetch_file(uri, self.args.input_base_url)
+            if not tempfd:
+                self.warc_input_failed.add(1)
+                continue
+
+            for res in self.process_file(uri, tempfd):
+                yield res
+
+            tempfd.close()
+            self.warc_input_processed.add(1)
+
+    def process_file(self, uri, tempfd):
+        """Process a single file"""
+        raise NotImplementedError('Processing file needs to be customized')
+
+    def check_for_output_file(self, uri, base_uri=None):
+        """
+        Check if output file exists.
+        """
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
+
+        if scheme in ['s3', 's3a', 's3n']:
+            bucketname = netloc
+            path = self.verify_s3_location(bucketname, path, uri)
+            if not path:
+                return False
+            self.get_logger().info('Checking if file exists on S3 {}'.format(uri))
+            try:
+                self.get_s3_client().head_object(Bucket=bucketname, Key=path)
+                return True
+            except botocore.client.ClientError as exception:
+                if exception.response['Error']['Code'] == '404':
+                    return False
+                self.get_logger().error(
+                    'Failed to check if file exists on S3 {}: {}'.format(uri, exception))
+                return False
+
+        elif scheme == 'http' or scheme == 'https':
+            raise ValueError('HTTP/HTTPS output not supported')
+
+        elif scheme == 'hdfs':
+            raise NotImplementedError('HDFS output not implemented')
+
+        else:
+            # local file or file:// URI
+            self.get_logger().info('Checking if local file exists {}'.format(uri))
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
+            return os.path.exists(uri)
+
+    def write_output_file(self, uri, fd, base_uri=None):
+        """
+        Write data from stream fd to output file location defined per URI.
+        """
+        (uri, scheme, netloc, path) = self.resolve_split_uri(uri, base_uri)
+
+        if scheme in ['s3', 's3a', 's3n']:
+            bucketname = netloc
+            path = self.verify_s3_location(bucketname, path, uri)
+            if not path:
+                return
+            self.get_logger().info('Writing to S3 {}'.format(uri))
+            try:
+                self.get_s3_client().upload_fileobj(fd, bucketname, path)
+            except botocore.client.ClientError as exception:
+                self.get_logger().error(
+                    'Failed to write to S3 {}: {}'.format(uri, exception))
+
+        elif scheme == 'http' or scheme == 'https':
+            raise ValueError('HTTP/HTTPS output not supported')
+
+        elif scheme == 'hdfs':
+            raise NotImplementedError('HDFS output not implemented')
+
+        else:
+            # local file or file:// URI
+            self.get_logger().info('Writing local file {}'.format(uri))
+            uri = self.convert_file_uri_to_path(scheme, path, uri)
+            os.makedirs(os.path.dirname(uri), exist_ok=True)
+            with open(uri, 'wb') as f:
+                f.write(fd.read())

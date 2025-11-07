@@ -1,9 +1,11 @@
+import json
 from io import BytesIO
 
 import pytest
 from unittest.mock import MagicMock, Mock
 
 from pyspark.sql import SparkSession
+from warcio.recordloader import ArcWarcRecord
 
 from cc_pyspark.jobs.sitemaps_from_robotstxt import SitemapExtractorJob
 from cc_pyspark.sparkcc import CCSparkJob

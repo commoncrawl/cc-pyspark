@@ -50,9 +50,21 @@ class CCFastWarcSparkJob(CCSparkJob):
         return record.http_headers.astuples()
 
     @staticmethod
+    def is_warcinfo_record(record: WarcRecord):
+        """Return true if WARC record is a WARC info record"""
+        return (record.record_type == WarcRecordType.warcinfo and
+                record.headers.get('Content-Type') == 'application/warc-fields')
+
+    @staticmethod
     def is_response_record(record: WarcRecord):
         """Return true if WARC record is a WARC response record"""
         return record.record_type == WarcRecordType.response
+
+    @staticmethod
+    def is_metadata_record(record: WarcRecord):
+        """Return true if WARC record is a WARC metadata record"""
+        return (record.record_type == WarcRecordType.metadata and
+                record.headers.get('Content-Type') == 'application/warc-fields')
 
     @staticmethod
     def is_wet_text_record(record: WarcRecord):

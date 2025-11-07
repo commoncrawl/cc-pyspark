@@ -1,4 +1,4 @@
-![Common Crawl Logo](https://commoncrawl.org/wp-content/uploads/2016/12/logocommoncrawl.png)
+![Common Crawl Logo](https://cdn.prod.website-files.com/6479b8d98bf5dcb4a69c4f31/649b5869af56f6df617cfb1f_CC_Logo_Blue_Auto.svg)
 
 # Common Crawl PySpark Examples
 
@@ -6,13 +6,17 @@ This project provides examples how to process the Common Crawl dataset with [Apa
 
 + [count HTML tags](src/cc_pyspark/jobs/html_tag_count.py) in Common Crawl's raw response data (WARC files)
 
-+ [count web server names](src/cc_pyspark/jobs/server_count.py) in Common Crawl's metadata (WAT files or WARC files)
++ [count web server names](src/cc_pyspark/jobs/server_count.py) in Common Crawl's metadata (HTTP headers in WAT or WARC files)
 
 + list host names and corresponding [IP addresses](src/cc_pyspark/jobs/server_ip_address.py) (WAT files or WARC files)
 
 + [word count](src/cc_pyspark/jobs/word_count.py) (term and document frequency) in Common Crawl's extracted text (WET files)
 
++ [md5sum](src/cc_pyspark/jobs/md5sum.py) Run an external command (`md5sum`) on a list of files from a manifest – WARC, WET, WAT, or any other type of file.
+
 + [extract links](src/cc_pyspark/jobs/wat_extract_links.py) from WAT files and [construct the (host-level) web graph](src/cc_pyspark/jobs/hostlinks_to_graph.py) – for further details about the web graphs see the project [cc-webgraph](https://github.com/commoncrawl/cc-webgraph)
+
++ [WET extractor](src/cc_pyspark/jobs/wet_extractor.py), using FastWARC and Resiliparse. See also [Using FastWARC](#using-fastwarc-to-read-warc-files).
 
 + work with the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see also [cc-index-table](https://github.com/commoncrawl/cc-index-table) and the notes about [querying the columnar index](#querying-the-columnar-index)):
 
@@ -65,7 +69,7 @@ This will install v3.5.7 of [the PySpark python package](https://spark.apache.or
 
 Install Spark if (see the [Spark documentation](https://spark.apache.org/docs/latest/) for guidance). Then, ensure that `spark-submit` and `pyspark` are on your `$PATH`, or prepend `$SPARK_HOME/bin` when running eg `$SPARK_HOME/bin/spark-submit`.
 
-> Note: The PySpark package is required if you want to run the tests in `test/`. 
+> Note: The PySpark package and "py4j" are required if you want to run the tests in `test/`. The packages are also included in Spark installations; Python binary is at `$SPARK_HOME/python` and package sources are at `$SPARK_HOME/python/lib/py4j-*-src.zip`.
 
 ## Compatibility and Requirements
 
@@ -155,7 +159,10 @@ As the Common Crawl dataset lives in the Amazon Public Datasets program, you can
 
 3. don't forget to deploy all dependencies in the cluster, see [advanced dependency management](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management)
 
-4. also the the file `sparkcc.py` needs to be deployed or added as argument `--py-files sparkcc.py` to `spark-submit`. Note: some of the examples require further Python files as dependencies.
+4. also the the file `sparkcc.py` needs to be deployed or added as argument `--py-files sparkcc.py` to `spark-submit`. Note: several of the examples require further Python files as dependencies.
+
+
+The script [run_ccpyspark_job_hadoop.sh](./run_ccpyspark_job_hadoop.sh) shows an example how to run a Spark job on a Hadoop cluster (Spark on YARN). Please, do not forget to adapt this script to your needs.
 
 
 ### Command-line options
@@ -206,7 +213,7 @@ Querying the columnar index using cc-pyspark requires authenticated S3 access. T
 
 #### Installation of S3 Support Libraries
 
-While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages org.apache.hadoop:hadoop-aws:3.2.1` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management) - the hadoop-aws package and transitive dependencies are downloaded as Maven dependencies. Note that the required version of hadoop-aws package depends on the Hadoop version bundled with your Spark installation, e.g., Spark 3.2.1 bundled with Hadoop 3.2 ([spark-3.2.1-bin-hadoop3.2.tgz](https://archive.apache.org/dist/spark/spark-3.2.1/spark-3.2.1-bin-hadoop3.2.tgz)).
+While WARC/WAT/WET files are read using boto3, accessing the [columnar URL index](https://commoncrawl.org/2018/03/index-to-warc-files-and-urls-in-columnar-format/) (see option `--query` of CCIndexSparkJob) is done directly by the SparkSQL engine and requires that S3 support libraries are available. These libs are usually provided when the Spark job is run on a Hadoop cluster running on AWS (eg. EMR). However, they may not be provided for any Spark distribution and are usually absent when running Spark locally (not in a Hadoop cluster). In these situations, the easiest way is to add the libs as required packages by adding `--packages org.apache.hadoop:hadoop-aws:3.3.4` to the arguments of `spark-submit`. This will make [Spark manage the dependencies](https://spark.apache.org/docs/latest/submitting-applications.html#advanced-dependency-management) - the hadoop-aws package and transitive dependencies are downloaded as Maven dependencies. Note that the required version of hadoop-aws package depends on the Hadoop version bundled with your Spark installation, e.g., Spark 3.5.6 bundled with Hadoop 3.3.4 ([spark-3.5.6-bin-hadoop3.tgz](https://archive.apache.org/dist/spark/spark-3.5.6/spark-3.5.6-bin-hadoop3.tgz)). Please check your Spark package and the underlying Hadoop installation for the correct version.
 
 Please also note that:
 - the schema of the URL referencing the columnar index depends on the actual S3 file system implementation: it's `s3://` on EMR but `s3a://` when using [s3a](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Introducing_the_Hadoop_S3A_client.).
@@ -217,7 +224,8 @@ Please also note that:
 Below an example call to count words in 10 WARC records host under the `.is` top-level domain using the `--packages` option:
 ```
 spark-submit \
-    --packages org.apache.hadoop:hadoop-aws:3.3.2 \
+    --packages org.apache.hadoop:hadoop-aws:3.3.4 \
+    --conf spark.sql.parquet.mergeSchema=true \
     ./cc_index_word_count.py \
     --input_base_url s3://commoncrawl/ \
     --query "SELECT url, warc_filename, warc_record_offset, warc_record_length, content_charset FROM ccindex WHERE crawl = 'CC-MAIN-2020-24' AND subset = 'warc' AND url_host_tld = 'is' LIMIT 10" \
@@ -241,7 +249,7 @@ Alternatively, it's possible configure the table schema explicitly:
 - and use it by adding the command-line argument `--table_schema cc-index-schema-flat.json`.
 
 
-### Using FastWARC to parse WARC files
+### Using FastWARC to read WARC files
 
 > [FastWARC](https://resiliparse.chatnoir.eu/en/latest/man/fastwarc.html) is a high-performance WARC parsing library for Python written in C++/Cython. The API is inspired in large parts by WARCIO, but does not aim at being a drop-in replacement.
 
@@ -254,6 +262,20 @@ To use FastWARC
 Some differences between the warcio and FastWARC APIs are hidden from the user in methods implemented in [CCSparkJob](src/cc_pyspark/sparkcc.py) and [CCFastWarcSparkJob](src/cc_pyspark/sparkcc_fastwarc.py) respectively. These methods allow to access WARC or HTTP headers and the payload stream in a unique way, regardless of whether warcio or FastWARC are used.
 
 However, it's recommended that you carefully verify that your custom job implementation works in combination with FastWARC. There are subtle differences between the warcio and FastWARC APIs, including the underlying classes (WARC/HTTP headers and stream implementations). In addition, FastWARC does not support for legacy ARC files and does not automatically decode HTTP content and transfer encodings (see [Resiliparse HTTP Tools](https://resiliparse.chatnoir.eu/en/latest/man/parse/http.html#read-chunked-http-payloads)). While content and transfer encodings are already decoded in Common Crawl WARC files, this may not be the case for WARC files from other sources. See also [WARC 1.1 specification, http/https response records](https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/#http-and-https-schemes).
+
+FastWARC allows to filter unwanted WARC record types at parse time, e.g., skip request records immediately not even passing them forward to the caller. To get the maximum performance from FastWARC, it's recommended to utilize the filters by setting the static class variable `fastwarc_record_filter`.
+
+The following examples are ported to use FastWARC:
++ [count HTML tags](./html_tag_count_fastwarc.py)
++ [count web server names](./server_count_fastwarc.py)
++ list host names and corresponding [IP addresses](./server_ip_address_fastwarc.py)
++ [word count](./word_count_fastwarc.py)
+
+In addition, the following tools are implemented using FastWARC:
++ [extract host-level links](./hostlinks_extract_fastwarc.py)
++ [WET extractor](./wet_extractor.py)
+
+Please refer to the above [description of examples](#common-crawl-pyspark-examples) for additional details.
 
 
 ## Running the Tests
