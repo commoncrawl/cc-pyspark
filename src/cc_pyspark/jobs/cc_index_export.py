@@ -1,4 +1,4 @@
-from sparkcc import CCIndexSparkJob
+from cc_pyspark.sparkcc import CCIndexSparkJob
 
 
 class CCIndexExportJob(CCIndexSparkJob):

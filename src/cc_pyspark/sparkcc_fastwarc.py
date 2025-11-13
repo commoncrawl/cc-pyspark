@@ -2,7 +2,7 @@ from fastwarc.warc import ArchiveIterator as FastWarcArchiveIterator
 from fastwarc.warc import WarcRecordType, WarcRecord
 from fastwarc.stream_io import FastWARCError
 
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 
 
 class CCFastWarcSparkJob(CCSparkJob):

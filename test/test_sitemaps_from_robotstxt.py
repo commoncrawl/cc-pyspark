@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, Mock
 from pyspark.sql import SparkSession
 from warcio.recordloader import ArcWarcRecord
 
-from sitemaps_from_robotstxt import SitemapExtractorJob
-from sparkcc import CCSparkJob
+from cc_pyspark.jobs.sitemaps_from_robotstxt import SitemapExtractorJob
+from cc_pyspark.sparkcc import CCSparkJob
 from utils import _process_jobs
 
 

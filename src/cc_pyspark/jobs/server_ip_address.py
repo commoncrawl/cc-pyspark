@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 
-from sparkcc import CCSparkJob
+from cc_pyspark.sparkcc import CCSparkJob
 
 
 class ServerIPAddressJob(CCSparkJob):
