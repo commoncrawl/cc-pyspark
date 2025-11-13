@@ -9,7 +9,7 @@
 name: Upload Python Package to PyPI
 
 on:
-  workflow_dispatch
+  workflow_dispatch:
   pull_request:
 
 #on:
