@@ -9,11 +9,14 @@
 name: Upload Python Package to PyPI
 
 on:
-  workflow_dispatch
+  #workflow_dispatch
+  pull_request:
+    types: [opened, reopened]
 
 #on:
 #  release:
 #    types: [published]
+
 
 permissions:
   contents: read
