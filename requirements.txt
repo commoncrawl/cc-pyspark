@@ -7,6 +7,7 @@ warcio
 
 # for link extraction and webgraph construction also:
 idna
+tldextract
 
 # for parsing HTML (used in cc_index_word_count.py)
 beautifulsoup4
