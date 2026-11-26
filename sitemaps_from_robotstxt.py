@@ -83,7 +83,7 @@ class SitemapExtractorJob(CCSparkJob):
                     # first sitemap found: set base URL and get host from URL
                     robots_txt_url = self.get_warc_header(record, 'WARC-Target-URI')
                     try:
-                        robots_txt_host = urlparse(robots_txt_url).netloc.lower().lstrip('.')
+                        robots_txt_host = urlparse(robots_txt_url).hostname.lower().lstrip('.')
                     except Exception as e:
                         self.get_logger().warn(f'Invalid robots.txt URL: {robots_txt_url}: {repr(e)}')
                         # skip this entire robots.txt record
