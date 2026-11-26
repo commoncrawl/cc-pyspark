@@ -32,11 +32,11 @@ Extending the [CCSparkJob](./sparkcc.py) isn't difficult and for many use cases 
 
 ## Setup
 
-To develop and test locally, you'll need **Python>=3.9** and **Spark**. 
+To develop and test locally, you'll need **Python>=3.11** and **Spark**.
 
 ### JRE
 
-Spark requires a 64-bit Java JRE (v8, 11, or 17 for Spark 3.5.7). Install this first. If you have an Apple Silicon device, Azul Zulu JRE is recommended for native architecture support. Ensure that either `java` is on your `$PATH` or the `$JAVA_HOME` env var points to your JRE.
+Spark requires a 64-bit Java JRE (v8, 11, or 17 for Spark 3.5.10). Install this first. If you have an Apple Silicon device, Azul Zulu JRE is recommended for native architecture support. Ensure that either `java` is on your `$PATH` or the `$JAVA_HOME` env var points to your JRE.
 
 ### Python dependencies
 
@@ -58,10 +58,10 @@ There are two ways to obtain Spark:
 #### For simple development or to get started quickly, the `pip install` route is recommended:
 
 ```bash
-pip install pyspark==3.5.7
+pip install pyspark==3.5.10
 ``` 
 
-This will install v3.5.7 of [the PySpark python package](https://spark.apache.org/docs/latest/api/python/getting_started/index.html), which includes a local/client-only version of Spark and also adds `spark-submit` and `pyspark` to your `$PATH`. 
+This will install v3.5.10 of [the PySpark python package](https://spark.apache.org/docs/latest/api/python/getting_started/index.html), which includes a local/client-only version of Spark and also adds `spark-submit` and `pyspark` to your `$PATH`.
 
 > If you need to interact with a remote Spark cluster, use a version of PySpark that matches the cluster version.
 
